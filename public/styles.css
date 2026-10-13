@@ -247,6 +247,10 @@ textarea {
   outline: none;
 }
 
+.uppercase-input {
+  text-transform: uppercase;
+}
+
 textarea {
   min-height: 82px;
   resize: vertical;
@@ -307,9 +311,9 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
-.columns {
+.customer-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
 }
 
@@ -334,7 +338,7 @@ textarea:focus {
   .shell,
   .hero,
   .invoice-grid,
-  .columns {
+  .customer-section {
     grid-template-columns: 1fr;
   }
 

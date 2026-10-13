@@ -22,7 +22,6 @@
           <a class="active" href="#facturar">Facturar</a>
           <a href="#clientes">Clientes</a>
           <a href="#conceptos">Conceptos</a>
-          <a href="#historial">Historial</a>
         </nav>
 
         <div class="fiscal-card">
@@ -37,10 +36,9 @@
         <header class="hero">
           <div>
             <p class="eyebrow">Operacion fiscal ligera · 100 facturas/mes</p>
-            <h1>Facturacion rapida, clara y sin depender del contador para cada CFDI.</h1>
+            <h1>Hyper CFDI 4.0 rápido para ventas y servicios</h1>
             <p class="hero-copy">
-              Captura clientes frecuentes, selecciona conceptos, timbra con Facturapi
-              y registra todo en Google Sheets para control operativo inmediato.
+              Captura al cliente, selecciona el concepto y emite la factura con registro automático.
             </p>
           </div>
           <section class="metrics" aria-label="Indicadores de facturacion">
@@ -78,11 +76,25 @@
                 <input required name="legal_name" placeholder="NOMBRE O RAZON SOCIAL" />
               </label>
               <label>RFC
-                <input required name="tax_id" placeholder="XAXX010101000" maxlength="13" />
+                <input required name="tax_id" class="uppercase-input" placeholder="XAXX010101000" maxlength="13" autocomplete="off" />
               </label>
               <div class="two">
-                <label>Regimen fiscal
-                  <input required name="tax_system" placeholder="601" />
+                <label>Régimen fiscal SAT
+                  <select required name="tax_system">
+                    <option value="601">601 · General de Ley Personas Morales</option>
+                    <option value="603">603 · Personas Morales con Fines no Lucrativos</option>
+                    <option value="605">605 · Sueldos y Salarios</option>
+                    <option value="606">606 · Arrendamiento</option>
+                    <option value="607">607 · Enajenacion o Adquisicion de Bienes</option>
+                    <option value="608">608 · Demas ingresos</option>
+                    <option value="611">611 · Dividendos</option>
+                    <option value="612">612 · Actividades Empresariales y Profesionales</option>
+                    <option value="614">614 · Intereses</option>
+                    <option value="616">616 · Sin obligaciones fiscales</option>
+                    <option value="621">621 · Incorporacion Fiscal</option>
+                    <option value="625">625 · Plataformas tecnologicas</option>
+                    <option value="626">626 · Regimen Simplificado de Confianza</option>
+                  </select>
                 </label>
                 <label>CP fiscal
                   <input required name="zip" placeholder="00000" maxlength="5" />
@@ -160,26 +172,13 @@
           </form>
         </section>
 
-        <section class="columns">
+        <section class="customer-section">
           <article class="panel" id="clientes">
             <div class="panel-head compact">
               <h2>Clientes frecuentes</h2>
               <button type="button" id="refresh-customers">Actualizar</button>
             </div>
             <div id="customers-list" class="list muted">Sin datos cargados.</div>
-          </article>
-
-          <article class="panel" id="historial">
-            <div class="panel-head compact">
-              <h2>Bitacora ejecutiva</h2>
-              <button type="button" id="refresh-dashboard">Actualizar</button>
-            </div>
-            <div class="timeline">
-              <p><b>Backend:</b> Firebase Functions.</p>
-              <p><b>Registro:</b> Google Sheets.</p>
-              <p><b>Timbrado:</b> Facturapi.</p>
-              <p><b>Escala inicial:</b> 100 CFDI al mes.</p>
-            </div>
           </article>
         </section>
       </main>

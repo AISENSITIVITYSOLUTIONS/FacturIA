@@ -26,7 +26,7 @@ function formData() {
   return {
     customer: {
       legal_name: data.legal_name,
-      tax_id: data.tax_id,
+      tax_id: String(data.tax_id || "").toUpperCase(),
       tax_system: data.tax_system,
       email: data.email,
       address: { zip: data.zip }
@@ -97,6 +97,13 @@ document.querySelectorAll("[data-mode]").forEach((button) => {
   });
 });
 
+const rfcInput = form.elements.tax_id;
+rfcInput.addEventListener("input", () => {
+  const cursor = rfcInput.selectionStart;
+  rfcInput.value = rfcInput.value.toUpperCase().replace(/\s/g, "");
+  rfcInput.setSelectionRange(cursor, cursor);
+});
+
 form.addEventListener("input", updatePreview);
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -117,7 +124,6 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-document.querySelector("#refresh-dashboard").addEventListener("click", loadDashboard);
 document.querySelector("#refresh-customers").addEventListener("click", loadCustomers);
 
 updatePreview();
