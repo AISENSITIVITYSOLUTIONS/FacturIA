@@ -122,8 +122,16 @@ main {
 .hero h1 {
   font-size: clamp(2.2rem, 4vw, 4.6rem);
   line-height: 0.98;
-  margin: 10px 0 16px;
+  margin: 10px 0 8px;
   max-width: 950px;
+  letter-spacing: 0;
+}
+
+.hero-subtitle {
+  margin: 0 0 16px;
+  color: #2563eb;
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  font-weight: 700;
   letter-spacing: 0;
 }
 
