@@ -8,7 +8,11 @@ const api = (path, options = {}) => fetch(`/api${path}`, {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
     const detail = payload.details?.message || payload.details?.errors?.[0]?.message;
-    throw new Error(detail || payload.error || "Operacion rechazada");
+    const message = detail || payload.error || "Operacion rechazada";
+    if (/api key|llave|key/i.test(message)) {
+      throw new Error("La llave secreta de Facturapi guardada en Firebase no es valida. Reemplaza FACTURAPI_SECRET_KEY con una Secret Key de Facturapi.");
+    }
+    throw new Error(message);
   }
   return payload;
 });
