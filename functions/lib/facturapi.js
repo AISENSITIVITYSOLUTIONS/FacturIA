@@ -3,12 +3,31 @@ import { httpError } from "./validators.js";
 
 const BASE_URL = "https://www.facturapi.io/v2";
 
+function facturapiErrorMessage(payload) {
+  if (!payload || typeof payload === "string") {
+    return payload || "Facturapi rechazo la operacion";
+  }
+
+  const messages = [
+    payload.message,
+    ...(Array.isArray(payload.errors) ? payload.errors.map((error) => {
+      const path = error.path ? `${error.path}: ` : "";
+      return `${path}${error.message}`;
+    }) : [])
+  ].filter(Boolean);
+
+  return messages.length
+    ? messages.join(" | ")
+    : "Facturapi rechazo la operacion";
+}
+
 async function request(path, options = {}) {
   const secretKey = readSecret(FACTURAPI_SECRET_KEY);
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Authorization": `Bearer ${secretKey}`,
+      "Accept-Language": "es",
       "Content-Type": "application/json",
       ...(options.headers || {})
     }
@@ -20,7 +39,7 @@ async function request(path, options = {}) {
     : await response.text();
 
   if (!response.ok) {
-    throw httpError(response.status, "Facturapi rechazo la operacion", payload);
+    throw httpError(response.status, facturapiErrorMessage(payload), payload);
   }
 
   return payload;

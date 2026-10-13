@@ -1,5 +1,6 @@
 const RFC_RE = /^([A-Z&Ñ]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/;
 const ZIP_RE = /^\d{5}$/;
+const GENERIC_RFC = new Set(["XAXX010101000", "XEXX010101000"]);
 
 export function assertRequired(value, field) {
   if (value === undefined || value === null || value === "") {
@@ -26,10 +27,12 @@ export function validateCustomer(customer) {
   assertRfc(customer?.tax_id, "customer.tax_id");
   assertRequired(customer?.tax_system, "customer.tax_system");
   assertZip(customer?.address?.zip || customer?.zip, "customer.zip");
+  const taxId = String(customer.tax_id).trim().toUpperCase();
+  const isGenericRfc = GENERIC_RFC.has(taxId);
   return {
-    legal_name: String(customer.legal_name).trim().toUpperCase(),
-    tax_id: String(customer.tax_id).trim().toUpperCase(),
-    tax_system: String(customer.tax_system).trim(),
+    legal_name: isGenericRfc ? "PUBLICO EN GENERAL" : String(customer.legal_name).trim().toUpperCase(),
+    tax_id: taxId,
+    tax_system: isGenericRfc ? "616" : String(customer.tax_system).trim(),
     email: customer.email ? String(customer.email).trim().toLowerCase() : "",
     phone: customer.phone ? String(customer.phone).trim() : "",
     address: {
@@ -63,22 +66,26 @@ export function validateInvoiceDraft(payload) {
         description: String(item.description).trim(),
         product_key: String(item.product_key).trim(),
         price,
+        tax_included: false,
+        taxability: "02",
+        taxes: [
+          {
+            type: "IVA",
+            rate: Number(item.tax_rate ?? 0.16)
+          }
+        ],
         unit_key: String(item.unit_key).trim(),
         unit_name: item.unit_name || "Unidad"
-      },
-      taxes: [
-        {
-          type: "IVA",
-          rate: Number(item.tax_rate ?? 0.16)
-        }
-      ]
+      }
     };
   });
+
+  const isGenericRfc = GENERIC_RFC.has(customer.tax_id);
 
   return {
     customer,
     items,
-    use: payload.use || "G03",
+    use: isGenericRfc ? "S01" : payload.use || "G03",
     payment_form: payload.payment_form || "03",
     payment_method: payload.payment_method || "PUE",
     conditions: payload.conditions || "",

@@ -34,7 +34,7 @@ function moneyFromItems(items) {
   return items.reduce((acc, item) => {
     const quantity = Number(item.quantity || 1);
     const price = Number(item.product?.price || 0);
-    const rate = Number(item.taxes?.[0]?.rate || 0);
+    const rate = Number(item.product?.taxes?.[0]?.rate || item.taxes?.[0]?.rate || 0);
     const subtotal = quantity * price;
     acc.subtotal += subtotal;
     acc.tax += subtotal * rate;

@@ -7,7 +7,8 @@ const api = (path, options = {}) => fetch(`/api${path}`, {
 }).then(async (response) => {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error || "Operacion rechazada");
+    const detail = payload.details?.message || payload.details?.errors?.[0]?.message;
+    throw new Error(detail || payload.error || "Operacion rechazada");
   }
   return payload;
 });
@@ -102,6 +103,10 @@ rfcInput.addEventListener("input", () => {
   const cursor = rfcInput.selectionStart;
   rfcInput.value = rfcInput.value.toUpperCase().replace(/\s/g, "");
   rfcInput.setSelectionRange(cursor, cursor);
+  if (["XAXX010101000", "XEXX010101000"].includes(rfcInput.value)) {
+    form.elements.tax_system.value = "616";
+    form.elements.use.value = "S01";
+  }
 });
 
 form.addEventListener("input", updatePreview);
