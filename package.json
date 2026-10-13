@@ -1,0 +1,15 @@
+{
+  "name": "facturia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FacturIA - Web app ejecutiva para facturacion CFDI 4.0 de Z E-Scooters Mexico.",
+  "scripts": {
+    "serve": "firebase emulators:start --only hosting,functions",
+    "deploy": "firebase deploy --only hosting,functions",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  }
+}

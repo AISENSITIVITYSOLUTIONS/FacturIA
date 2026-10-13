@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.firebase/
+.runtimeconfig.json
+.env
+.env.*
+service-account*.json
+*.local
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+public/assets/generated/
