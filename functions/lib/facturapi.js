@@ -79,10 +79,59 @@ export async function cancelInvoice(invoiceId, motive = "02", substitution) {
   });
 }
 
+/**
+ * Descarga el PDF o XML de un CFDI. La llave secreta nunca sale del servidor:
+ * el navegador recibe el archivo a traves de /api/invoices/:id/pdf|xml.
+ */
+export async function downloadInvoiceFile(invoiceId, format) {
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(invoiceId))) {
+    throw httpError(400, "Identificador de factura invalido");
+  }
+  const secretKey = readSecret(FACTURAPI_SECRET_KEY);
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/${format}`, {
+    headers: { "Authorization": `Bearer ${secretKey}` }
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    let payload = text;
+    try { payload = JSON.parse(text); } catch { /* texto plano */ }
+    throw httpError(response.status, facturapiErrorMessage(payload), payload);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Verifica la llave contra Facturapi sin exponerla. Devuelve el modo
+ * (prueba o produccion) para mostrarlo en la interfaz.
+ */
+export async function facturapiStatus() {
+  let secretKey = "";
+  try {
+    secretKey = readSecret(FACTURAPI_SECRET_KEY);
+  } catch {
+    return { connected: false, reason: "missing", mode: null };
+  }
+  const mode = secretKey.startsWith("sk_test_") ? "test" : secretKey.startsWith("sk_live_") ? "live" : "unknown";
+  if (mode === "unknown") {
+    return { connected: false, reason: "invalid_format", mode };
+  }
+  try {
+    const response = await fetch(`${BASE_URL}/customers?limit=1`, {
+      headers: { "Authorization": `Bearer ${secretKey}` }
+    });
+    if (response.status === 401 || response.status === 403) {
+      return { connected: false, reason: "rejected", mode };
+    }
+    return { connected: response.ok, reason: response.ok ? null : `http_${response.status}`, mode };
+  } catch {
+    return { connected: false, reason: "network", mode };
+  }
+}
+
 export function pdfUrl(invoiceId) {
-  return `${BASE_URL}/invoices/${invoiceId}/pdf`;
+  return `/api/invoices/${invoiceId}/pdf`;
 }
 
 export function xmlUrl(invoiceId) {
-  return `${BASE_URL}/invoices/${invoiceId}/xml`;
+  return `/api/invoices/${invoiceId}/xml`;
 }

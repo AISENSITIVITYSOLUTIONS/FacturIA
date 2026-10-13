@@ -58,6 +58,7 @@ cd ..
 firebase functions:secrets:set FACTURAPI_SECRET_KEY --project facturia
 firebase functions:secrets:set GOOGLE_SERVICE_ACCOUNT_JSON --project facturia
 firebase functions:secrets:set GOOGLE_SHEET_ID --project facturia
+firebase functions:secrets:set FACTURAI_ACCESS_CODE --project facturia
 firebase deploy --only hosting,functions --project facturia
 ```
 
