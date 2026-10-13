@@ -60,14 +60,19 @@ function updatePreview() {
 }
 
 async function loadDashboard() {
+  const countEl = document.querySelector("#metric-count");
+  const totalEl = document.querySelector("#metric-total");
+  const remainingEl = document.querySelector("#metric-remaining");
+  if (!countEl || !totalEl || !remainingEl) return;
+
   try {
     const { data } = await api("/dashboard");
-    document.querySelector("#metric-count").textContent = data.count ?? 0;
-    document.querySelector("#metric-total").textContent = money.format(data.total ?? 0);
-    document.querySelector("#metric-remaining").textContent = data.remainingCapacity ?? 100;
+    countEl.textContent = data.count ?? 0;
+    totalEl.textContent = money.format(data.total ?? 0);
+    remainingEl.textContent = data.remainingCapacity ?? 100;
   } catch {
-    document.querySelector("#metric-count").textContent = "-";
-    document.querySelector("#metric-total").textContent = "Sin conexion";
+    countEl.textContent = "-";
+    totalEl.textContent = "Sin conexion";
   }
 }
 
