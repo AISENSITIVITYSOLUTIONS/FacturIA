@@ -3,22 +3,57 @@ import { initializeApp } from "firebase-admin/app";
 import { COMPANY_PROFILE, DEFAULT_INVOICE_SETTINGS } from "./config/company.js";
 import { SHEETS } from "./data/sheetSchema.js";
 import { appendRow, audit, dashboard, listRows } from "./lib/sheets.js";
-import { cancelInvoice, createDraft, createInvoice, pdfUrl, sendInvoiceByEmail, xmlUrl } from "./lib/facturapi.js";
+import { timingSafeEqual } from "node:crypto";
+import { cancelInvoice, createDraft, createInvoice, downloadInvoiceFile, facturapiStatus, pdfUrl, sendInvoiceByEmail, xmlUrl } from "./lib/facturapi.js";
 import { validateCustomer, validateInvoiceDraft, sendError, httpError } from "./lib/validators.js";
-import { FACTURAPI_SECRET_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID } from "./lib/env.js";
+import { FACTURAI_ACCESS_CODE, FACTURAPI_SECRET_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID, readSecretOrEmpty } from "./lib/env.js";
 
 initializeApp();
 
 const runtimeSecrets = [
   FACTURAPI_SECRET_KEY,
   GOOGLE_SERVICE_ACCOUNT_JSON,
-  GOOGLE_SHEET_ID
+  GOOGLE_SHEET_ID,
+  FACTURAI_ACCESS_CODE
 ];
 
 function cors(res) {
-  res.set("Access-Control-Allow-Origin", "*");
+  // La interfaz se sirve desde el mismo dominio (rewrite /api/**), por eso no se abre CORS a terceros.
   res.set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Access-Code");
+  res.set("Cache-Control", "no-store");
+}
+
+/**
+ * Solo quien conoce el codigo de acceso (secreto FACTURAI_ACCESS_CODE) puede
+ * leer clientes o timbrar. Falla cerrado: si el secreto no existe, nadie entra.
+ */
+function assertAccess(req) {
+  const expected = readSecretOrEmpty(FACTURAI_ACCESS_CODE);
+  const provided = String(req.get("X-Access-Code") || "").trim();
+  if (!expected) {
+    throw httpError(503, "Falta configurar el secreto FACTURAI_ACCESS_CODE en Firebase.");
+  }
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    throw httpError(401, "Codigo de acceso incorrecto.");
+  }
+}
+
+/**
+ * Registro en Google Sheets despues de timbrar. Si Sheets falla, el CFDI ya
+ * existe ante el SAT: se informa como advertencia y nunca como error, para
+ * evitar que el usuario vuelva a timbrar la misma venta.
+ */
+async function safeLog(task) {
+  try {
+    await task();
+    return null;
+  } catch (error) {
+    console.error("Registro en Sheets fallido", error);
+    return "El CFDI se emitio, pero no se pudo registrar en Google Sheets.";
+  }
 }
 
 function route(req) {
@@ -67,6 +102,26 @@ function rowFromInvoice(localId, payload, facturapiInvoice, status) {
   };
 }
 
+/** Guarda al receptor como cliente frecuente si su RFC aun no esta en la hoja. */
+async function upsertCustomer(payload) {
+  const { customer } = payload;
+  if (customer.tax_id === "XAXX010101000" || customer.tax_id === "XEXX010101000") return;
+  const existing = await listRows(SHEETS.customers, 1000);
+  if (existing.some((row) => String(row.tax_id).toUpperCase() === customer.tax_id)) return;
+  await appendRow(SHEETS.customers, {
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+    legal_name: customer.legal_name,
+    tax_id: customer.tax_id,
+    tax_system: customer.tax_system,
+    zip: customer.address.zip,
+    email: customer.email,
+    phone: customer.phone,
+    default_use: payload.use,
+    notes: ""
+  });
+}
+
 async function handle(req, res) {
   cors(res);
   if (req.method === "OPTIONS") {
@@ -84,6 +139,29 @@ async function handle(req, res) {
       company: COMPANY_PROFILE.legalName,
       monthlyInvoiceEstimate: COMPANY_PROFILE.monthlyInvoiceEstimate
     });
+    return;
+  }
+
+  assertAccess(req);
+
+  if (method === "GET" && path === "/session") {
+    res.json({ ok: true, data: { facturapi: await facturapiStatus() } });
+    return;
+  }
+
+  if (method === "GET" && path === "/invoices") {
+    const rows = await listRows(SHEETS.invoices, 500);
+    res.json({ ok: true, data: rows.slice(-60).reverse() });
+    return;
+  }
+
+  const fileMatch = path.match(/^\/invoices\/([^/]+)\/(pdf|xml)$/);
+  if (method === "GET" && fileMatch) {
+    const [, invoiceId, format] = fileMatch;
+    const file = await downloadInvoiceFile(invoiceId, format);
+    res.set("Content-Type", format === "pdf" ? "application/pdf" : "application/xml");
+    res.set("Content-Disposition", `attachment; filename="CFDI-${invoiceId}.${format}"`);
+    res.send(file);
     return;
   }
 
@@ -153,9 +231,11 @@ async function handle(req, res) {
     const payload = validateInvoiceDraft(jsonBody(req));
     const draft = await createDraft(payload);
     const row = rowFromInvoice(payload.external_id, payload, draft, "draft");
-    await appendRow(SHEETS.invoices, row);
-    await audit("create_invoice_draft", "invoice", { localId: payload.external_id, facturapiId: draft.id });
-    res.status(201).json({ ok: true, data: { invoice: draft, row } });
+    const warning = await safeLog(async () => {
+      await appendRow(SHEETS.invoices, row);
+      await audit("create_invoice_draft", "invoice", { localId: payload.external_id, facturapiId: draft.id });
+    });
+    res.status(201).json({ ok: true, data: { invoice: draft, row, warnings: warning ? [warning] : [] } });
     return;
   }
 
@@ -163,12 +243,36 @@ async function handle(req, res) {
     const payload = validateInvoiceDraft(jsonBody(req));
     const invoice = await createInvoice(payload);
     const row = rowFromInvoice(payload.external_id, payload, invoice, "stamped");
-    await appendRow(SHEETS.invoices, row);
+    const warnings = [];
+    let emailed = false;
     if (payload.customer.email) {
-      await sendInvoiceByEmail(invoice.id, payload.customer.email);
+      try {
+        await sendInvoiceByEmail(invoice.id, payload.customer.email);
+        emailed = true;
+      } catch (error) {
+        console.error("Envio por correo fallido", error);
+        warnings.push("El CFDI se emitio, pero el correo al cliente no se envio. Puedes reenviarlo.");
+      }
     }
-    await audit("stamp_invoice", "invoice", { localId: payload.external_id, facturapiId: invoice.id, uuid: invoice.uuid });
-    res.status(201).json({ ok: true, data: { invoice, row } });
+    const logWarning = await safeLog(async () => {
+      await appendRow(SHEETS.invoices, row);
+      await audit("stamp_invoice", "invoice", { localId: payload.external_id, facturapiId: invoice.id, uuid: invoice.uuid });
+      await upsertCustomer(payload);
+    });
+    if (logWarning) warnings.push(logWarning);
+    res.status(201).json({ ok: true, data: { invoice, row, emailed, warnings } });
+    return;
+  }
+
+  const emailMatch = path.match(/^\/invoices\/([^/]+)\/email$/);
+  if (method === "POST" && emailMatch) {
+    const body = jsonBody(req);
+    const email = String(body.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw httpError(400, "Correo invalido");
+    }
+    await sendInvoiceByEmail(emailMatch[1], email);
+    res.json({ ok: true, data: { emailed: true } });
     return;
   }
 

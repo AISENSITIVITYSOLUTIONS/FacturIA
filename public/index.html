@@ -3,184 +3,418 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FacturAI | Z E-Scooters Mexico</title>
-    <meta name="description" content="FacturAI: facturacion CFDI 4.0 agil para Z E-Scooters Mexico." />
-    <link rel="stylesheet" href="/styles.css" />
+    <meta name="theme-color" content="#0B0C0E" />
+    <title>FacturAI · Z E-Scooters México</title>
+    <meta name="description" content="FacturAI: facturación CFDI 4.0 para Z E-Scooters México." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=2" />
   </head>
   <body>
+    <!-- Acceso -->
+    <div class="gate" id="gate" hidden>
+      <form class="gate-card" id="gate-form" autocomplete="off">
+        <img class="gate-logo" src="/assets/z-personal-electric-sidebar.png" alt="Z Personal Electric Vehicle" />
+        <div class="gate-copy">
+          <span class="eyebrow">FacturAI · Acceso</span>
+          <h1>Facturación CFDI 4.0</h1>
+          <p>Ingresa el código de acceso de Z E-Scooters México para emitir y consultar facturas.</p>
+        </div>
+        <label class="field">
+          <span class="field-label">Código de acceso</span>
+          <input class="input mono" type="password" name="code" required autocomplete="current-password" />
+        </label>
+        <button class="btn btn-primary btn-lg" type="submit">Entrar</button>
+        <p class="gate-error" id="gate-error" role="alert"></p>
+      </form>
+    </div>
+
     <div class="shell">
       <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">
-            <img src="/assets/z-personal-electric-sidebar.png" alt="Z Personal Electric Vehicle" />
-          </div>
-          <div>
-            <strong>FacturAI</strong>
-            <span>Z E-Scooters Mexico</span>
-          </div>
+        <a class="brand" href="#facturar" aria-label="FacturAI, inicio">
+          <img src="/assets/z-personal-electric-sidebar.png" alt="Z Personal Electric Vehicle" />
+        </a>
+        <div class="brand-name">
+          <strong>FacturAI</strong>
+          <span>Z E-Scooters México</span>
         </div>
 
-        <nav>
-          <a class="active" href="#facturar">Facturar</a>
-          <a href="#clientes">Clientes</a>
-          <a href="#conceptos">Conceptos</a>
+        <nav class="nav" aria-label="Principal">
+          <a href="#facturar" data-view-link="facturar">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            Facturar
+          </a>
+          <a href="#clientes" data-view-link="clientes">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/></svg>
+            Clientes
+          </a>
+          <a href="#historial" data-view-link="historial">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+            Historial
+          </a>
         </nav>
 
-        <div class="fiscal-card">
-          <span>Emisor CFDI 4.0</span>
-          <strong>ZEM210611H42</strong>
-          <p>Z E-SCOOTERS MEXICO, S.A. de C.V.</p>
-          <p>Regimen 601 · CP 11800</p>
+        <div class="side-foot">
+          <div class="meter">
+            <div class="meter-row">
+              <span>Facturas del mes</span>
+              <span class="mono" id="meter-label">— / 100</span>
+            </div>
+            <div class="meter-track"><div class="meter-fill" id="meter-fill"></div></div>
+          </div>
+          <div class="conn" id="conn" data-state="checking">
+            <span class="conn-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="conn-title">Verificando Facturapi…</strong>
+              <span id="conn-detail"></span>
+            </div>
+          </div>
         </div>
       </aside>
 
-      <main>
-        <header class="hero">
-          <div class="hero-content">
-            <p class="eyebrow">Operacion fiscal ligera · 100 facturas/mes</p>
-            <h1>Hyper CFDI 4.0</h1>
-            <p class="hero-subtitle">rápido para ventas y servicios</p>
-            <p class="hero-copy">
-              Captura al cliente, selecciona el concepto y emite la factura con registro automático.
-            </p>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="emisor">
+            <strong>Z E-Scooters México, S.A. de C.V.</strong>
+            <span class="sep" aria-hidden="true"></span>
+            <span class="mono">ZEM210611H42</span>
+            <span class="sep" aria-hidden="true"></span>
+            <span>Régimen 601 · General de Ley PM</span>
+            <span class="sep" aria-hidden="true"></span>
+            <span>Lugar de expedición <span class="mono">11800</span></span>
           </div>
-          <div class="hero-brand" aria-hidden="true">
-            <img src="/assets/z-personal-electric-vehicle.png" alt="" />
-          </div>
+          <button class="btn btn-ghost btn-sm" type="button" id="logout">Salir</button>
         </header>
 
-        <section class="panel" id="facturar">
-          <div class="panel-head">
+        <!-- ============ FACTURAR ============ -->
+        <main class="view" id="view-facturar" data-view="facturar">
+          <div class="page-head">
             <div>
-              <p class="eyebrow">Nueva factura</p>
-              <h2>Crear CFDI en menos de un minuto</h2>
-            </div>
-            <div class="mode-switch" role="group" aria-label="Modo de emision">
-              <button class="active" type="button" data-mode="stamp">Timbrar</button>
-              <button type="button" data-mode="draft">Borrador</button>
+              <span class="eyebrow">CFDI 4.0 · Ingreso</span>
+              <h1>Nueva factura</h1>
+              <p>Captura receptor y conceptos; la vista previa se arma en tiempo real. Al timbrar, el PDF y el XML se envían al correo del cliente.</p>
             </div>
           </div>
 
-          <form id="invoice-form" class="invoice-grid">
-            <fieldset>
-              <legend>Cliente receptor</legend>
-              <label>Razon social
-                <input required name="legal_name" placeholder="NOMBRE O RAZON SOCIAL" />
-              </label>
-              <label>RFC
-                <input required name="tax_id" class="uppercase-input" placeholder="XAXX010101000" maxlength="13" autocomplete="off" />
-              </label>
-              <div class="two">
-                <label>Régimen fiscal SAT
-                  <select required name="tax_system">
-                    <optgroup label="Personas morales">
-                      <option value="601">601 · General de Ley Personas Morales</option>
-                      <option value="603">603 · Personas Morales con Fines no Lucrativos</option>
-                    </optgroup>
-                    <optgroup label="Personas físicas">
-                      <option value="605">605 · Sueldos y Salarios</option>
-                      <option value="606">606 · Arrendamiento</option>
-                      <option value="607">607 · Enajenacion o Adquisicion de Bienes</option>
-                      <option value="608">608 · Demas ingresos</option>
-                      <option value="611">611 · Dividendos</option>
-                      <option value="612">612 · Actividades Empresariales y Profesionales</option>
-                      <option value="614">614 · Intereses</option>
-                      <option value="616">616 · Sin obligaciones fiscales</option>
-                      <option value="621">621 · Incorporacion Fiscal</option>
-                      <option value="625">625 · Plataformas tecnologicas</option>
-                      <option value="626">626 · Regimen Simplificado de Confianza</option>
-                    </optgroup>
-                  </select>
-                </label>
-                <label>CP fiscal
-                  <input required name="zip" placeholder="00000" maxlength="5" />
-                </label>
-              </div>
-              <label>Correo para envio
-                <input name="email" type="email" placeholder="cliente@empresa.com" />
-              </label>
-            </fieldset>
+          <form class="compose" id="invoice-form" novalidate>
+            <div class="compose-main">
+              <!-- 01 Receptor -->
+              <section class="card" aria-labelledby="h-receptor">
+                <div class="card-head">
+                  <div class="card-title"><span class="step mono">01</span><h2 id="h-receptor">Cliente receptor</h2></div>
+                  <div class="chips">
+                    <button class="chip" type="button" id="btn-publico">
+                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                      Público en general
+                    </button>
+                    <a class="chip" href="#clientes">Elegir cliente frecuente</a>
+                  </div>
+                </div>
+                <div class="grid">
+                  <label class="field span-all">
+                    <span class="field-label">Razón social</span>
+                    <input class="input upper" name="legal_name" required placeholder="Exactamente como aparece en la Constancia de Situación Fiscal" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">RFC</span>
+                    <input class="input mono upper" name="tax_id" required maxlength="13" autocomplete="off" placeholder="XAXX010101000" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Código postal fiscal</span>
+                    <input class="input mono" name="zip" required maxlength="5" inputmode="numeric" placeholder="00000" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Régimen fiscal</span>
+                    <select class="input" name="tax_system" required>
+                      <option value="">Selecciona…</option>
+                      <optgroup label="Personas morales">
+                        <option value="601">601 · General de Ley Personas Morales</option>
+                        <option value="603">603 · PM con Fines no Lucrativos</option>
+                      </optgroup>
+                      <optgroup label="Personas físicas">
+                        <option value="605">605 · Sueldos y Salarios</option>
+                        <option value="606">606 · Arrendamiento</option>
+                        <option value="607">607 · Enajenación o Adquisición de Bienes</option>
+                        <option value="608">608 · Demás ingresos</option>
+                        <option value="611">611 · Dividendos</option>
+                        <option value="612">612 · Actividades Empresariales y Profesionales</option>
+                        <option value="614">614 · Intereses</option>
+                        <option value="616">616 · Sin obligaciones fiscales</option>
+                        <option value="621">621 · Incorporación Fiscal</option>
+                        <option value="625">625 · Plataformas Tecnológicas</option>
+                        <option value="626">626 · Régimen Simplificado de Confianza</option>
+                      </optgroup>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Correo para envío</span>
+                    <input class="input" name="email" type="email" placeholder="facturacion@cliente.mx" />
+                  </label>
+                </div>
+              </section>
 
-            <fieldset>
-              <legend>Concepto</legend>
-              <label>Descripcion
-                <input required name="description" value="Venta de vehiculo electrico personal" />
-              </label>
-              <div class="two">
-                <label>Clave SAT
-                  <input required name="product_key" value="25101900" />
-                </label>
-                <label>Unidad
-                  <input required name="unit_key" value="H87" />
-                </label>
-              </div>
-              <div class="three">
-                <label>Cantidad
-                  <input required name="quantity" type="number" min="1" step="1" value="1" />
-                </label>
-                <label>Precio sin IVA
-                  <input required name="price" type="number" min="0" step="0.01" placeholder="0.00" />
-                </label>
-                <label>IVA
-                  <input required name="tax_rate" type="number" min="0" step="0.01" value="0.16" />
-                </label>
-              </div>
-            </fieldset>
+              <!-- 02 Conceptos -->
+              <section class="card" aria-labelledby="h-conceptos">
+                <div class="card-head">
+                  <div class="card-title"><span class="step mono">02</span><h2 id="h-conceptos">Conceptos</h2></div>
+                  <span class="hint">IVA trasladado 16 %</span>
+                </div>
+                <div class="catalog" id="catalog" hidden>
+                  <span class="field-label">Del catálogo</span>
+                  <div class="chips" id="catalog-chips"></div>
+                </div>
+                <div class="lines" id="lines"></div>
+                <button class="add-line" type="button" id="add-line">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                  Agregar concepto
+                </button>
+              </section>
 
-            <fieldset>
-              <legend>Condiciones fiscales</legend>
-              <div class="three">
-                <label>Uso CFDI
-                  <select name="use">
-                    <option value="G03">G03 · Gastos en general</option>
-                    <option value="G01">G01 · Adquisicion de mercancias</option>
-                    <option value="I08">I08 · Otra maquinaria y equipo</option>
-                    <option value="S01">S01 · Sin efectos fiscales</option>
-                  </select>
+              <!-- 03 Condiciones -->
+              <section class="card" aria-labelledby="h-cond">
+                <div class="card-head">
+                  <div class="card-title"><span class="step mono">03</span><h2 id="h-cond">Condiciones fiscales</h2></div>
+                </div>
+                <div class="grid">
+                  <label class="field">
+                    <span class="field-label">Uso del CFDI</span>
+                    <select class="input" name="use">
+                      <option value="G03">G03 · Gastos en general</option>
+                      <option value="G01">G01 · Adquisición de mercancías</option>
+                      <option value="I08">I08 · Otra maquinaria y equipo</option>
+                      <option value="S01">S01 · Sin efectos fiscales</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Forma de pago</span>
+                    <select class="input" name="payment_form">
+                      <option value="03">03 · Transferencia electrónica</option>
+                      <option value="04">04 · Tarjeta de crédito</option>
+                      <option value="28">28 · Tarjeta de débito</option>
+                      <option value="01">01 · Efectivo</option>
+                      <option value="99">99 · Por definir</option>
+                    </select>
+                  </label>
+                  <div class="field">
+                    <span class="field-label" id="lbl-metodo">Método de pago</span>
+                    <div class="segmented" role="radiogroup" aria-labelledby="lbl-metodo">
+                      <label><input type="radio" name="payment_method" value="PUE" checked /><span>PUE · Una exhibición</span></label>
+                      <label><input type="radio" name="payment_method" value="PPD" /><span>PPD · Parcialidades</span></label>
+                    </div>
+                  </div>
+                </div>
+                <div class="notice" id="ppd-notice" role="status" hidden>
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+                  <span>Con método PPD, el SAT exige forma de pago <strong>99 · Por definir</strong>. El pago real se acredita después con un complemento de pago.</span>
+                  <button class="link-btn" type="button" id="fix-ppd">Cambiar a 99</button>
+                </div>
+                <label class="field">
+                  <span class="field-label">Condiciones de pago <span class="opt">(opcional, aparece en el CFDI)</span></span>
+                  <textarea class="input" name="conditions" rows="3" placeholder="Ej. Contado, 30 días, número de pedido…"></textarea>
                 </label>
-                <label>Forma de pago
-                  <select name="payment_form">
-                    <option value="03">03 · Transferencia</option>
-                    <option value="04">04 · Tarjeta de credito</option>
-                    <option value="28">28 · Tarjeta de debito</option>
-                    <option value="99">99 · Por definir</option>
-                  </select>
-                </label>
-                <label>Metodo
-                  <select name="payment_method">
-                    <option value="PUE">PUE · Pago en una exhibicion</option>
-                    <option value="PPD">PPD · Pago diferido/parcialidades</option>
-                  </select>
-                </label>
-              </div>
-              <label>Notas internas o condiciones
-                <textarea name="conditions" placeholder="Opcional"></textarea>
-              </label>
-            </fieldset>
-
-            <div class="summary-card">
-              <span>Resumen</span>
-              <strong id="preview-total">$0.00</strong>
-              <p>Subtotal <b id="preview-subtotal">$0.00</b></p>
-              <p>IVA <b id="preview-tax">$0.00</b></p>
-              <button type="submit">Generar CFDI</button>
-              <small id="form-status">Listo para capturar.</small>
+              </section>
             </div>
+
+            <!-- Vista previa -->
+            <aside class="compose-side" aria-label="Vista previa del CFDI">
+              <div class="sheet">
+                <div class="sheet-head">
+                  <div>
+                    <span class="sheet-kicker">Vista previa</span>
+                    <strong>Factura</strong>
+                  </div>
+                  <span class="badge mono">Borrador</span>
+                </div>
+                <div class="sheet-body">
+                  <div class="parties">
+                    <div>
+                      <span class="kicker">Emisor</span>
+                      <strong>Z E-Scooters México</strong>
+                      <span class="mono soft">ZEM210611H42</span>
+                    </div>
+                    <div>
+                      <span class="kicker">Receptor</span>
+                      <strong class="ellipsis" id="pv-name">Razón social del receptor</strong>
+                      <span class="mono soft" id="pv-rfc">RFC pendiente</span>
+                    </div>
+                  </div>
+                  <div class="pv-lines" id="pv-lines"></div>
+                  <div class="pv-sums">
+                    <div><span>Subtotal</span><span class="mono" id="pv-subtotal">$0.00</span></div>
+                    <div><span>IVA 16 %</span><span class="mono" id="pv-tax">$0.00</span></div>
+                  </div>
+                  <div class="pv-total">
+                    <span>Total MXN</span>
+                    <strong class="mono" id="pv-total">$0.00</strong>
+                  </div>
+                  <div class="pv-foot">
+                    <div class="qr-ph" aria-hidden="true"></div>
+                    <span>Folio fiscal (UUID), sellos y código QR se asignan al timbrar ante el SAT.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="checks">
+                <span class="kicker">Antes de timbrar</span>
+                <ul id="checks"></ul>
+              </div>
+
+              <button class="btn btn-primary btn-xl" type="submit" id="btn-stamp" disabled>
+                <span id="stamp-label">Completa los datos para timbrar</span>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+              <button class="btn btn-ghost" type="button" id="btn-draft">Guardar como borrador en Facturapi</button>
+              <p class="status" id="form-status" role="status" aria-live="polite"></p>
+            </aside>
           </form>
-        </section>
+        </main>
 
-        <section class="customer-section">
-          <article class="panel" id="clientes">
-            <div class="panel-head compact">
-              <h2>Clientes frecuentes</h2>
-              <button type="button" id="refresh-customers">Actualizar</button>
+        <!-- ============ TIMBRADO ============ -->
+        <main class="view" id="view-exito" data-view="exito" hidden>
+          <div class="success">
+            <div class="success-main">
+              <div class="success-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              </div>
+              <span class="eyebrow ok" id="sx-kicker">Timbrado ante el SAT</span>
+              <h1 id="sx-title">Factura emitida</h1>
+              <p id="sx-copy"></p>
+              <div class="warnings" id="sx-warnings"></div>
+              <div class="downloads">
+                <button class="dl" type="button" data-download="pdf">
+                  <span class="dl-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3"/></svg></span>
+                  <span><strong>Descargar PDF</strong><small>Representación impresa</small></span>
+                </button>
+                <button class="dl" type="button" data-download="xml">
+                  <span class="dl-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg></span>
+                  <span><strong>Descargar XML</strong><small>Archivo fiscal timbrado</small></span>
+                </button>
+              </div>
+              <div class="actions">
+                <button class="btn btn-primary" type="button" id="btn-new">
+                  Nueva factura
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button class="btn btn-ghost" type="button" id="btn-resend">Reenviar por correo</button>
+              </div>
             </div>
-            <div id="customers-list" class="list muted">Sin datos cargados.</div>
-          </article>
-        </section>
-      </main>
+            <aside class="sheet" aria-label="Resumen del comprobante">
+              <div class="sheet-head">
+                <div>
+                  <span class="sheet-kicker">CFDI 4.0 · Ingreso</span>
+                  <strong class="mono" id="sx-folio">—</strong>
+                </div>
+                <span class="badge badge-live" id="sx-badge"><span aria-hidden="true"></span>Vigente</span>
+              </div>
+              <dl class="sheet-body">
+                <div class="dl-row"><dt class="kicker">Folio fiscal (UUID)</dt><dd class="mono break" id="sx-uuid">—</dd></div>
+                <div class="parties">
+                  <div><dt class="kicker">Receptor</dt><dd><strong id="sx-name">—</strong></dd><dd class="mono soft" id="sx-rfc">—</dd></div>
+                  <div><dt class="kicker">Fecha</dt><dd class="mono" id="sx-date">—</dd></div>
+                </div>
+                <div class="parties">
+                  <div><dt class="kicker">Método · Forma</dt><dd class="mono" id="sx-pay">—</dd></div>
+                  <div><dt class="kicker">Uso CFDI</dt><dd class="mono" id="sx-use">—</dd></div>
+                </div>
+                <div class="pv-total"><dt>Total MXN</dt><dd class="mono" id="sx-total">—</dd></div>
+              </dl>
+            </aside>
+          </div>
+        </main>
+
+        <!-- ============ CLIENTES ============ -->
+        <main class="view" id="view-clientes" data-view="clientes" hidden>
+          <div class="page-head">
+            <div>
+              <span class="eyebrow">Directorio fiscal</span>
+              <h1>Clientes</h1>
+              <p>Cada receptor que factures se guarda aquí. Un clic y la factura se llena sola.</p>
+            </div>
+            <button class="btn btn-ghost" type="button" id="refresh-customers">Actualizar</button>
+          </div>
+          <label class="search">
+            <span class="sr-only">Buscar cliente</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="input" type="search" id="customer-search" placeholder="Buscar por razón social o RFC" />
+          </label>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="table">
+                <thead>
+                  <tr><th>Razón social</th><th>RFC</th><th>Régimen</th><th>CP</th><th>Uso</th><th><span class="sr-only">Acción</span></th></tr>
+                </thead>
+                <tbody id="customers-body"></tbody>
+              </table>
+            </div>
+            <div class="empty" id="customers-empty" hidden></div>
+          </div>
+        </main>
+
+        <!-- ============ HISTORIAL ============ -->
+        <main class="view" id="view-historial" data-view="historial" hidden>
+          <div class="page-head">
+            <div>
+              <span class="eyebrow">Registro operativo</span>
+              <h1>Historial</h1>
+              <p>Últimas facturas emitidas desde FacturAI.</p>
+            </div>
+            <button class="btn btn-ghost" type="button" id="refresh-invoices">Actualizar</button>
+          </div>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="table">
+                <thead>
+                  <tr><th>Fecha</th><th>Receptor</th><th>Folio</th><th>Estado</th><th class="num">Total</th><th><span class="sr-only">Archivos</span></th></tr>
+                </thead>
+                <tbody id="invoices-body"></tbody>
+              </table>
+            </div>
+            <div class="empty" id="invoices-empty" hidden></div>
+          </div>
+        </main>
+      </div>
     </div>
 
-    <script src="/app.js" type="module"></script>
+    <template id="line-template">
+      <div class="line">
+        <div class="grid grid-line">
+          <label class="field span-all">
+            <span class="field-label">Descripción</span>
+            <input class="input" data-k="description" placeholder="Scooter eléctrico, refacción o servicio de taller" />
+          </label>
+          <label class="field">
+            <span class="field-label">Clave SAT</span>
+            <input class="input mono" data-k="product_key" placeholder="25101900" />
+          </label>
+          <label class="field">
+            <span class="field-label">Unidad</span>
+            <select class="input" data-k="unit_key">
+              <option value="H87">H87 · Pieza</option>
+              <option value="E48">E48 · Unidad de servicio</option>
+              <option value="ACT">ACT · Actividad</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Cantidad</span>
+            <input class="input mono" data-k="quantity" type="number" min="1" step="1" value="1" />
+          </label>
+          <label class="field">
+            <span class="field-label">Precio unitario sin IVA</span>
+            <input class="input mono" data-k="price" type="number" min="0" step="0.01" placeholder="0.00" />
+          </label>
+        </div>
+        <div class="line-foot">
+          <span>Importe <b class="mono" data-amount>$0.00</b></span>
+          <button class="icon-btn" type="button" data-remove aria-label="Quitar concepto">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/app.js?v=2" type="module"></script>
   </body>
 </html>

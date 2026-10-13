@@ -1,145 +1,632 @@
-const api = (path, options = {}) => fetch(`/api${path}`, {
-  ...options,
-  headers: {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
+// FacturAI — interfaz de facturación CFDI 4.0 de Z E-Scooters México.
+// Toda operación fiscal pasa por /api (Firebase Functions); la llave de
+// Facturapi vive como secreto en el servidor y nunca llega al navegador.
+
+const CODE_KEY = "facturai.access";
+const GENERIC_RFC = new Set(["XAXX010101000", "XEXX010101000"]);
+const RFC_RE = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
+const EMISOR_ZIP = "11800";
+const IVA = 0.16;
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
+const dateFmt = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
+
+const store = {
+  get() { try { return sessionStorage.getItem(CODE_KEY) || ""; } catch { return ""; } },
+  set(v) { try { sessionStorage.setItem(CODE_KEY, v); } catch { /* sin almacenamiento */ } },
+  clear() { try { sessionStorage.removeItem(CODE_KEY); } catch { /* sin almacenamiento */ } }
+};
+
+let accessCode = store.get();
+let lastInvoice = null;
+let customersCache = [];
+
+/* ------------------------------------------------------------------ API */
+
+class ApiError extends Error {
+  constructor(message, status) { super(message); this.status = status; }
+}
+
+async function api(path, { method = "GET", body, raw = false } = {}) {
+  const response = await fetch(`/api${path}`, {
+    method,
+    headers: {
+      "X-Access-Code": accessCode,
+      ...(body ? { "Content-Type": "application/json" } : {})
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  if (response.status === 401) {
+    showGate("El código de acceso no es válido o expiró.");
+    throw new ApiError("Acceso requerido", 401);
   }
-}).then(async (response) => {
+  if (raw && response.ok) return response;
+
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
-    const detail = payload.details?.message || payload.details?.errors?.[0]?.message;
-    const message = detail || payload.error || "Operacion rechazada";
-    if (/api key|llave|key/i.test(message)) {
-      throw new Error("La llave secreta de Facturapi guardada en Firebase no es valida. Reemplaza FACTURAPI_SECRET_KEY con una Secret Key de Facturapi.");
-    }
-    throw new Error(message);
+    throw new ApiError(friendlyError(payload, response.status), response.status);
   }
   return payload;
+}
+
+function friendlyError(payload, status) {
+  const detail = payload?.details?.message
+    || payload?.details?.errors?.map((e) => e.message).join(" · ")
+    || payload?.error;
+  const message = String(detail || "La operación fue rechazada.");
+  if (/missing secret: facturapi/i.test(message)) {
+    return "Falta configurar la llave secreta de Facturapi en Firebase (FACTURAPI_SECRET_KEY).";
+  }
+  if (/api ?key|invalid key|clave de api/i.test(message) || (status === 401 && /facturapi/i.test(message))) {
+    return "Facturapi rechazó la llave secreta. Revisa FACTURAPI_SECRET_KEY en Firebase.";
+  }
+  if (/missing secret: google|sheets/i.test(message)) {
+    return "Google Sheets aún no está conectado; esta sección se activará al configurarlo.";
+  }
+  return message;
+}
+
+/* --------------------------------------------------------------- Acceso */
+
+function showGate(message = "") {
+  store.clear();
+  accessCode = "";
+  $("#gate").hidden = false;
+  $("#gate-error").textContent = message;
+  setTimeout(() => $("#gate-form input")?.focus(), 30);
+}
+
+$("#gate-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = event.currentTarget.elements.code;
+  accessCode = input.value.trim();
+  $("#gate-error").textContent = "";
+  try {
+    const { data } = await api("/session");
+    store.set(accessCode);
+    $("#gate").hidden = true;
+    input.value = "";
+    paintConnection(data.facturapi);
+    boot();
+  } catch (error) {
+    if (error.status !== 401) $("#gate-error").textContent = error.message;
+  }
 });
 
-const money = new Intl.NumberFormat("es-MX", {
-  style: "currency",
-  currency: "MXN"
+$("#logout").addEventListener("click", () => showGate());
+
+/* ---------------------------------------------------------- Navegación */
+
+function route() {
+  const name = (location.hash || "#facturar").slice(1);
+  const views = ["facturar", "clientes", "historial", "exito"];
+  const target = views.includes(name) ? name : "facturar";
+  $$(".view").forEach((v) => { v.hidden = v.dataset.view !== target; });
+  $$("[data-view-link]").forEach((a) => {
+    if (a.dataset.viewLink === (target === "exito" ? "facturar" : target)) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  });
+  if (target === "clientes") loadCustomers();
+  if (target === "historial") loadInvoices();
+  if (target === "exito" && !lastInvoice) location.hash = "#facturar";
+  window.scrollTo({ top: 0 });
+}
+window.addEventListener("hashchange", route);
+
+/* ---------------------------------------------------- Estado de conexión */
+
+function paintConnection(status) {
+  const el = $("#conn");
+  const title = $("#conn-title");
+  const detail = $("#conn-detail");
+  if (!status) return;
+  if (status.connected && status.mode === "live") {
+    el.dataset.state = "ok";
+    title.textContent = "Facturapi conectado";
+    detail.textContent = "Producción · los CFDI tienen validez fiscal.";
+  } else if (status.connected && status.mode === "test") {
+    el.dataset.state = "test";
+    title.textContent = "Facturapi en modo prueba";
+    detail.textContent = "Los CFDI de prueba no tienen validez ante el SAT.";
+  } else {
+    el.dataset.state = "error";
+    title.textContent = "Facturapi sin conectar";
+    detail.textContent = {
+      missing: "Falta la llave secreta en Firebase.",
+      invalid_format: "La llave guardada no tiene formato sk_test_ o sk_live_.",
+      rejected: "Facturapi rechazó la llave guardada.",
+      network: "No se pudo contactar a Facturapi."
+    }[status.reason] || "Revisa la configuración del servidor.";
+  }
+}
+
+async function loadMeter() {
+  try {
+    const { data } = await api("/dashboard");
+    const count = Number(data.count || 0);
+    const target = Number(data.invoiceTarget || 100);
+    $("#meter-label").textContent = `${count} / ${target}`;
+    $("#meter-fill").style.width = `${Math.min(100, (count / target) * 100)}%`;
+  } catch {
+    $("#meter-label").textContent = `— / 100`;
+  }
+}
+
+/* ------------------------------------------------------------ Conceptos */
+
+const form = $("#invoice-form");
+const linesEl = $("#lines");
+
+function addLine(values = {}) {
+  const node = $("#line-template").content.firstElementChild.cloneNode(true);
+  const uid = Math.random().toString(36).slice(2, 8);
+  $$("[data-k]", node).forEach((input) => {
+    input.id = `${input.dataset.k}-${uid}`;
+    input.closest("label")?.setAttribute("for", input.id);
+    if (values[input.dataset.k] !== undefined && values[input.dataset.k] !== "") input.value = values[input.dataset.k];
+  });
+  if (values.product_key === undefined && linesEl.children.length === 0) {
+    // Valores iniciales que ya usaba la versión anterior.
+    $("[data-k='product_key']", node).value = "25101900";
+    $("[data-k='description']", node).value = "Venta de vehículo eléctrico personal";
+  }
+  $("[data-remove]", node).addEventListener("click", () => { node.remove(); refresh(); });
+  linesEl.append(node);
+  refresh();
+  return node;
+}
+
+function readLines() {
+  return $$(".line", linesEl).map((node) => {
+    const get = (k) => $(`[data-k='${k}']`, node).value;
+    const unit = $("[data-k='unit_key']", node);
+    return {
+      node,
+      description: get("description").trim(),
+      product_key: get("product_key").trim(),
+      unit_key: unit.value,
+      unit_name: unit.selectedOptions[0]?.textContent.split("·")[1]?.trim() || "Pieza",
+      quantity: Number(get("quantity") || 0),
+      price: Number(get("price") || 0),
+      tax_rate: IVA
+    };
+  });
+}
+
+$("#add-line").addEventListener("click", () => {
+  const node = addLine({ product_key: "" });
+  $("[data-k='description']", node).focus();
 });
 
-const form = document.querySelector("#invoice-form");
-const statusEl = document.querySelector("#form-status");
-let mode = "stamp";
+async function loadCatalog() {
+  try {
+    const { data } = await api("/products");
+    const active = data.filter((p) => String(p.active || "SI").toUpperCase() !== "NO").slice(0, 12);
+    if (!active.length) return;
+    const chips = $("#catalog-chips");
+    chips.replaceChildren(...active.map((p) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = p.description;
+      b.addEventListener("click", () => {
+        const empty = readLines().find((l) => !l.price && (!l.description || l.description === "Venta de vehículo eléctrico personal"));
+        const values = { description: p.description, product_key: p.product_key, unit_key: p.unit_key || "H87", quantity: 1, price: p.unit_price };
+        if (empty) {
+          Object.entries(values).forEach(([k, v]) => { const i = $(`[data-k='${k}']`, empty.node); if (i && v !== undefined) i.value = v; });
+          refresh();
+        } else {
+          addLine(values);
+        }
+      });
+      return b;
+    }));
+    $("#catalog").hidden = false;
+  } catch { /* catálogo opcional */ }
+}
 
-function formData() {
-  const data = Object.fromEntries(new FormData(form));
+/* ------------------------------------------------------- Vista previa */
+
+function readForm() {
+  const f = form.elements;
   return {
     customer: {
-      legal_name: data.legal_name,
-      tax_id: String(data.tax_id || "").toUpperCase(),
-      tax_system: data.tax_system,
-      email: data.email,
-      address: { zip: data.zip }
+      legal_name: f.legal_name.value.trim().toUpperCase(),
+      tax_id: f.tax_id.value.trim().toUpperCase(),
+      tax_system: f.tax_system.value,
+      email: f.email.value.trim(),
+      address: { zip: f.zip.value.trim() }
     },
-    use: data.use,
-    payment_form: data.payment_form,
-    payment_method: data.payment_method,
-    conditions: data.conditions,
-    items: [{
-      description: data.description,
-      product_key: data.product_key,
-      unit_key: data.unit_key,
-      unit_name: "Pieza",
-      quantity: Number(data.quantity || 1),
-      price: Number(data.price || 0),
-      tax_rate: Number(data.tax_rate || 0.16)
-    }]
+    use: f.use.value,
+    payment_form: f.payment_form.value,
+    payment_method: form.querySelector("[name='payment_method']:checked")?.value || "PUE",
+    conditions: f.conditions.value.trim()
   };
 }
 
-function updatePreview() {
-  const data = formData();
-  const item = data.items[0];
-  const subtotal = item.quantity * item.price;
-  const tax = subtotal * item.tax_rate;
-  const total = subtotal + tax;
-  document.querySelector("#preview-subtotal").textContent = money.format(subtotal);
-  document.querySelector("#preview-tax").textContent = money.format(tax);
-  document.querySelector("#preview-total").textContent = money.format(total);
+function refresh() {
+  const data = readForm();
+  const lines = readLines();
+  linesEl.dataset.single = String(lines.length <= 1);
+
+  let subtotal = 0;
+  const pv = $("#pv-lines");
+  pv.replaceChildren(...lines.map((l) => {
+    const amount = l.quantity * l.price;
+    subtotal += amount;
+    $("[data-amount]", l.node).textContent = money.format(amount);
+    const row = document.createElement("div");
+    row.className = "pv-line";
+    const left = document.createElement("div");
+    const name = document.createElement("span");
+    name.className = "ellipsis";
+    name.textContent = l.description || "Concepto sin descripción";
+    const meta = document.createElement("small");
+    meta.textContent = `${l.quantity || 0} × ${money.format(l.price)}`;
+    left.append(name, meta);
+    const amt = document.createElement("span");
+    amt.className = "mono";
+    amt.textContent = money.format(amount);
+    row.append(left, amt);
+    return row;
+  }));
+
+  const tax = Math.round(subtotal * IVA * 100) / 100;
+  $("#pv-subtotal").textContent = money.format(subtotal);
+  $("#pv-tax").textContent = money.format(tax);
+  $("#pv-total").textContent = money.format(subtotal + tax);
+  $("#pv-name").textContent = data.customer.legal_name || "Razón social del receptor";
+  $("#pv-rfc").textContent = data.customer.tax_id || "RFC pendiente";
+
+  const rfcOk = RFC_RE.test(data.customer.tax_id);
+  const zipOk = /^\d{5}$/.test(data.customer.address.zip);
+  const receptorOk = rfcOk && zipOk && !!data.customer.legal_name && !!data.customer.tax_system;
+  const linesOk = lines.length > 0 && subtotal > 0 && lines.every((l) => l.description && l.product_key && l.quantity > 0 && l.price >= 0);
+  const ppdConflict = data.payment_method === "PPD" && data.payment_form !== "99";
+  $("#ppd-notice").hidden = !ppdConflict;
+
+  const checks = [
+    [rfcOk, "RFC con estructura válida"],
+    [receptorOk, "Receptor completo (razón social, régimen y CP)"],
+    [linesOk, "Conceptos con clave SAT e importe"],
+    [!ppdConflict, "Método y forma de pago compatibles"]
+  ];
+  $("#checks").replaceChildren(...checks.map(([ok, label]) => {
+    const li = document.createElement("li");
+    li.dataset.ok = String(ok);
+    li.textContent = label;
+    return li;
+  }));
+
+  const ready = checks.every(([ok]) => ok);
+  const btn = $("#btn-stamp");
+  if (!btn.dataset.busy) {
+    btn.disabled = !ready;
+    $("#stamp-label").textContent = ready ? `Timbrar CFDI · ${money.format(subtotal + tax)}` : "Completa los datos para timbrar";
+  }
+  $("#btn-draft").disabled = !(receptorOk && linesOk);
+  return { ready, payload: { ...data, items: lines.map(({ node, ...l }) => l) } };
 }
 
-async function loadDashboard() {
-  const countEl = document.querySelector("#metric-count");
-  const totalEl = document.querySelector("#metric-total");
-  const remainingEl = document.querySelector("#metric-remaining");
-  if (!countEl || !totalEl || !remainingEl) return;
+form.addEventListener("input", refresh);
+form.addEventListener("change", refresh);
+
+/* --------------------------------------------------- Ayudas de captura */
+
+const f = form.elements;
+
+f.tax_id.addEventListener("input", () => {
+  const pos = f.tax_id.selectionStart;
+  f.tax_id.value = f.tax_id.value.toUpperCase().replace(/\s/g, "");
+  f.tax_id.setSelectionRange(pos, pos);
+  if (GENERIC_RFC.has(f.tax_id.value)) applyPublicoGeneral(false);
+});
+f.zip.addEventListener("input", () => { f.zip.value = f.zip.value.replace(/\D/g, "").slice(0, 5); });
+
+function applyPublicoGeneral(fillRfc = true) {
+  if (fillRfc) f.tax_id.value = "XAXX010101000";
+  f.legal_name.value = "PUBLICO EN GENERAL";
+  f.tax_system.value = "616";
+  f.use.value = "S01";
+  // CFDI 4.0: para público en general, el domicilio fiscal del receptor es el lugar de expedición.
+  f.zip.value = EMISOR_ZIP;
+  refresh();
+}
+$("#btn-publico").addEventListener("click", () => applyPublicoGeneral(true));
+
+$("#fix-ppd").addEventListener("click", () => { f.payment_form.value = "99"; refresh(); });
+
+function fillCustomer(c) {
+  f.legal_name.value = c.legal_name || "";
+  f.tax_id.value = c.tax_id || "";
+  f.tax_system.value = c.tax_system || "";
+  f.zip.value = c.zip || "";
+  f.email.value = c.email || "";
+  if (c.default_use) f.use.value = c.default_use;
+  location.hash = "#facturar";
+  refresh();
+  toast(`Receptor cargado: ${c.legal_name}`);
+}
+
+/* ------------------------------------------------------------ Emisión */
+
+function setStatus(text, tone = "") {
+  const el = $("#form-status");
+  el.textContent = text;
+  el.dataset.tone = tone;
+}
+
+async function emit(kind) {
+  const { ready, payload } = refresh();
+  if (kind === "stamp" && !ready) return;
+  const btn = $("#btn-stamp");
+  btn.dataset.busy = "1";
+  btn.disabled = true;
+  $("#btn-draft").disabled = true;
+  setStatus(kind === "stamp" ? "Timbrando ante el SAT…" : "Guardando borrador…", "busy");
 
   try {
-    const { data } = await api("/dashboard");
-    countEl.textContent = data.count ?? 0;
-    totalEl.textContent = money.format(data.total ?? 0);
-    remainingEl.textContent = data.remainingCapacity ?? 100;
-  } catch {
-    countEl.textContent = "-";
-    totalEl.textContent = "Sin conexion";
+    const { data } = await api(kind === "stamp" ? "/invoices/stamp" : "/invoices/draft", {
+      method: "POST",
+      body: { ...payload, external_id: crypto.randomUUID() }
+    });
+    setStatus("");
+    showSuccess(data, kind, payload);
+    loadMeter();
+  } catch (error) {
+    if (error.status !== 401) setStatus(error.message, "error");
+  } finally {
+    delete btn.dataset.busy;
+    refresh();
+  }
+}
+
+form.addEventListener("submit", (event) => { event.preventDefault(); emit("stamp"); });
+$("#btn-draft").addEventListener("click", () => emit("draft"));
+
+function showSuccess(data, kind, payload) {
+  const inv = data.invoice || {};
+  lastInvoice = { id: inv.id, email: payload.customer.email };
+  const isDraft = kind === "draft";
+  const total = inv.total ?? data.row?.total;
+
+  $("#sx-kicker").textContent = isDraft ? "Guardado en Facturapi" : "Timbrado ante el SAT";
+  $("#sx-title").textContent = isDraft ? "Borrador guardado" : "Factura emitida";
+  const copy = $("#sx-copy");
+  copy.replaceChildren();
+  if (isDraft) {
+    copy.textContent = "El borrador quedó en Facturapi. Podrás timbrarlo desde su panel cuando esté listo.";
+  } else if (data.emailed) {
+    copy.append("El comprobante ya tiene validez fiscal. Se envió PDF y XML a ");
+    const s = document.createElement("strong");
+    s.textContent = payload.customer.email;
+    copy.append(s, ".");
+  } else {
+    copy.textContent = "El comprobante ya tiene validez fiscal. Descarga el PDF y el XML para entregarlos al cliente.";
+  }
+
+  $("#sx-warnings").replaceChildren(...(data.warnings || []).map((w) => {
+    const n = document.createElement("div");
+    n.className = "notice";
+    n.textContent = w;
+    return n;
+  }));
+
+  const series = inv.series || data.row?.series || "";
+  const folio = inv.folio_number || data.row?.folio || "";
+  $("#sx-folio").textContent = folio ? `Serie ${series} · Folio ${folio}` : (isDraft ? "Borrador" : "—");
+  $("#sx-uuid").textContent = inv.uuid || (isDraft ? "Se asigna al timbrar" : "—");
+  $("#sx-name").textContent = payload.customer.legal_name;
+  $("#sx-rfc").textContent = payload.customer.tax_id;
+  $("#sx-date").textContent = inv.date ? dateFmt.format(new Date(inv.date)) : dateFmt.format(new Date());
+  $("#sx-pay").textContent = `${payload.payment_method} · ${payload.payment_form}`;
+  $("#sx-use").textContent = payload.use;
+  $("#sx-total").textContent = total !== undefined ? money.format(Number(total)) : "—";
+  const badge = $("#sx-badge");
+  badge.className = isDraft ? "badge badge-draft" : "badge badge-live";
+  badge.lastChild.textContent = isDraft ? "Borrador" : "Vigente";
+
+  $$("[data-download]").forEach((b) => { b.hidden = isDraft || !inv.id; });
+  $("#btn-resend").hidden = isDraft || !inv.id;
+  location.hash = "#exito";
+}
+
+async function download(id, format) {
+  try {
+    const response = await api(`/invoices/${encodeURIComponent(id)}/${format}`, { raw: true });
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `CFDI-${id}.${format}`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (error) {
+    if (error.status !== 401) toast(error.message);
+  }
+}
+
+$$("[data-download]").forEach((b) => b.addEventListener("click", () => lastInvoice?.id && download(lastInvoice.id, b.dataset.download)));
+
+$("#btn-resend").addEventListener("click", async () => {
+  if (!lastInvoice?.id) return;
+  const email = window.prompt("Correo del destinatario", lastInvoice.email || "");
+  if (!email) return;
+  try {
+    await api(`/invoices/${encodeURIComponent(lastInvoice.id)}/email`, { method: "POST", body: { email } });
+    toast(`Factura enviada a ${email}`);
+  } catch (error) {
+    if (error.status !== 401) toast(error.message);
+  }
+});
+
+$("#btn-new").addEventListener("click", () => {
+  form.reset();
+  linesEl.replaceChildren();
+  addLine();
+  lastInvoice = null;
+  location.hash = "#facturar";
+  f.legal_name.focus();
+});
+
+/* ------------------------------------------------------------ Clientes */
+
+function initials(name) {
+  return String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+}
+
+function cell(text, cls) {
+  const td = document.createElement("td");
+  if (cls) td.className = cls;
+  td.textContent = text ?? "";
+  return td;
+}
+
+function emptyState(el, title, text) {
+  const h = document.createElement("h2");
+  h.textContent = title;
+  const p = document.createElement("p");
+  p.textContent = text;
+  el.replaceChildren(h, p);
+  el.hidden = false;
+}
+
+function renderCustomers() {
+  const q = $("#customer-search").value.trim().toUpperCase();
+  const base = [{ legal_name: "PUBLICO EN GENERAL", tax_id: "XAXX010101000", tax_system: "616", zip: EMISOR_ZIP, default_use: "S01", note: "Ventas de mostrador sin RFC" }];
+  const all = base.concat(customersCache.slice().reverse());
+  const rows = all.filter((c) => !q || String(c.legal_name).toUpperCase().includes(q) || String(c.tax_id).includes(q));
+  $("#customers-body").replaceChildren(...rows.map((c) => {
+    const tr = document.createElement("tr");
+    const who = document.createElement("td");
+    who.innerHTML = `<div class="who"><span class="avatar" aria-hidden="true"></span><span><strong></strong><small></small></span></div>`;
+    $(".avatar", who).textContent = initials(c.legal_name);
+    $("strong", who).textContent = c.legal_name;
+    $("small", who).textContent = c.note || c.email || "";
+    const act = document.createElement("td");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-ghost btn-sm";
+    btn.textContent = "Facturar";
+    btn.addEventListener("click", () => fillCustomer(c));
+    const wrap = document.createElement("div");
+    wrap.className = "row-actions";
+    wrap.append(btn);
+    act.append(wrap);
+    tr.append(who, cell(c.tax_id, "mono"), cell(c.tax_system), cell(c.zip, "mono"), cell(c.default_use, "mono"), act);
+    return tr;
+  }));
+  const empty = $("#customers-empty");
+  if (!customersCache.length) {
+    emptyState(empty, "Aún no hay clientes frecuentes", "Cada receptor que factures se guarda aquí automáticamente con su RFC, régimen y código postal.");
+  } else {
+    empty.hidden = true;
   }
 }
 
 async function loadCustomers() {
-  const list = document.querySelector("#customers-list");
   try {
     const { data } = await api("/customers");
-    if (!data.length) {
-      list.textContent = "Aun no hay clientes registrados.";
-      return;
-    }
-    list.innerHTML = data.slice(-8).reverse().map((customer) => `
-      <div class="customer-row">
-        <strong>${customer.legal_name}</strong>
-        <span>${customer.tax_id} · Regimen ${customer.tax_system} · CP ${customer.zip}</span>
-      </div>
-    `).join("");
-  } catch {
-    list.textContent = "Conecta Google Sheets para cargar clientes.";
+    customersCache = data || [];
+    renderCustomers();
+  } catch (error) {
+    if (error.status === 401) return;
+    customersCache = [];
+    renderCustomers();
+    emptyState($("#customers-empty"), "Directorio no disponible", error.message);
   }
 }
+$("#customer-search").addEventListener("input", renderCustomers);
+$("#refresh-customers").addEventListener("click", loadCustomers);
 
-document.querySelectorAll("[data-mode]").forEach((button) => {
-  button.addEventListener("click", () => {
-    mode = button.dataset.mode;
-    document.querySelectorAll("[data-mode]").forEach((entry) => entry.classList.remove("active"));
-    button.classList.add("active");
-  });
-});
+/* ----------------------------------------------------------- Historial */
 
-const rfcInput = form.elements.tax_id;
-rfcInput.addEventListener("input", () => {
-  const cursor = rfcInput.selectionStart;
-  rfcInput.value = rfcInput.value.toUpperCase().replace(/\s/g, "");
-  rfcInput.setSelectionRange(cursor, cursor);
-  if (["XAXX010101000", "XEXX010101000"].includes(rfcInput.value)) {
-    form.elements.tax_system.value = "616";
-    form.elements.use.value = "S01";
-  }
-});
+const STATUS = { stamped: ["Timbrada", "pill-stamped"], draft: ["Borrador", "pill-draft"], cancelled: ["Cancelada", "pill-cancelled"] };
 
-form.addEventListener("input", updatePreview);
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  statusEl.textContent = mode === "stamp" ? "Timbrando CFDI..." : "Creando borrador...";
+async function loadInvoices() {
+  const body = $("#invoices-body");
+  const empty = $("#invoices-empty");
   try {
-    const endpoint = mode === "stamp" ? "/invoices/stamp" : "/invoices/draft";
-    const result = await api(endpoint, {
-      method: "POST",
-      body: JSON.stringify(formData())
-    });
-    const invoice = result.data.invoice;
-    statusEl.textContent = invoice.uuid
-      ? `CFDI timbrado. UUID: ${invoice.uuid}`
-      : "Borrador creado correctamente.";
-    await Promise.allSettled([loadDashboard(), loadCustomers()]);
+    const { data } = await api("/invoices");
+    const rows = (data || []).filter((r) => r.status !== "cancelled" || r.customer_name);
+    body.replaceChildren(...rows.map((r) => {
+      const tr = document.createElement("tr");
+      const date = r.created_at ? dateFmt.format(new Date(r.created_at)) : "";
+      const [label, cls] = STATUS[r.status] || [r.status, "pill-draft"];
+      const st = document.createElement("td");
+      const pill = document.createElement("span");
+      pill.className = `pill ${cls}`;
+      pill.textContent = label;
+      st.append(pill);
+      const act = document.createElement("td");
+      const wrap = document.createElement("div");
+      wrap.className = "row-actions";
+      if (r.facturapi_id && r.status === "stamped") {
+        ["pdf", "xml"].forEach((fmt) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "btn btn-ghost btn-sm";
+          b.textContent = fmt.toUpperCase();
+          b.setAttribute("aria-label", `Descargar ${fmt.toUpperCase()} de ${r.customer_name}`);
+          b.addEventListener("click", () => download(r.facturapi_id, fmt));
+          wrap.append(b);
+        });
+      }
+      act.append(wrap);
+      const folio = r.folio ? `${r.series || ""} ${r.folio}`.trim() : "—";
+      tr.append(cell(date, "mono"), cell(r.customer_name), cell(folio, "mono"), st, cell(r.total ? money.format(Number(r.total)) : "", "mono num"), act);
+      return tr;
+    }));
+    if (!rows.length) emptyState(empty, "Sin facturas todavía", "Las facturas que emitas desde FacturAI aparecerán aquí con su PDF y XML.");
+    else empty.hidden = true;
   } catch (error) {
-    statusEl.textContent = error.message;
+    if (error.status === 401) return;
+    body.replaceChildren();
+    emptyState(empty, "Historial no disponible", error.message);
   }
-});
+}
+$("#refresh-invoices").addEventListener("click", loadInvoices);
 
-document.querySelector("#refresh-customers").addEventListener("click", loadCustomers);
+/* --------------------------------------------------------------- Toast */
 
-updatePreview();
-loadDashboard();
-loadCustomers();
+let toastTimer;
+function toast(message) {
+  const el = $("#toast");
+  el.textContent = message;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 4200);
+}
+
+/* ---------------------------------------------------------------- Boot */
+
+let booted = false;
+function boot() {
+  if (booted) { route(); return; }
+  booted = true;
+  route();
+  loadMeter();
+  loadCatalog();
+  loadCustomers();
+}
+
+addLine();
+refresh();
+
+if (!accessCode) {
+  showGate();
+} else {
+  api("/session")
+    .then(({ data }) => { paintConnection(data.facturapi); boot(); })
+    .catch((error) => {
+      if (error.status !== 401) {
+        paintConnection({ connected: false, reason: "network" });
+        boot();
+      }
+    });
+}
