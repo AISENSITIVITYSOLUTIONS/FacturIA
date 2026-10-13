@@ -43,7 +43,7 @@ body::before {
 
 .shell {
   display: grid;
-  grid-template-columns: 292px minmax(0, 1fr);
+  grid-template-columns: 304px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -64,23 +64,56 @@ body::before {
 
 .brand {
   display: flex;
-  gap: 14px;
+  gap: 13px;
   align-items: center;
+  min-width: 0;
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  position: relative;
+  width: 78px;
+  height: 52px;
+  flex: 0 0 78px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 34%),
-    linear-gradient(135deg, var(--blue), var(--cyan));
-  font-weight: 900;
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 38%),
+    radial-gradient(circle at 70% 0%, rgba(0, 184, 212, 0.22), transparent 32%),
+    linear-gradient(145deg, #07172d, #0a1c36 58%, #030914);
+  border: 1px solid rgba(157, 178, 203, 0.28);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    0 18px 38px rgba(0, 164, 200, 0.32);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -18px 28px rgba(0, 0, 0, 0.24),
+    0 18px 32px rgba(0, 0, 0, 0.26),
+    0 0 32px rgba(0, 184, 212, 0.14);
+  overflow: hidden;
+  transform: perspective(480px) rotateX(7deg) rotateY(-8deg);
+}
+
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 0 35%, rgba(255, 255, 255, 0.26) 46%, transparent 58%);
+  mix-blend-mode: screen;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.brand-mark img {
+  position: relative;
+  z-index: 1;
+  width: 92%;
+  height: 78%;
+  object-fit: contain;
+  filter: saturate(1.1) contrast(1.08) drop-shadow(0 8px 12px rgba(0, 0, 0, 0.45));
+}
+
+.brand strong {
+  display: block;
+  font-size: 1.05rem;
+  letter-spacing: 0;
 }
 
 .brand span,
@@ -138,8 +171,8 @@ main {
 .hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.32fr);
-  gap: 22px;
+  grid-template-columns: 1fr;
+  gap: 0;
   align-items: center;
   margin-bottom: 26px;
   padding: 28px 30px;
@@ -192,62 +225,6 @@ main {
   color: #425b75;
   font-size: 1.04rem;
   line-height: 1.7;
-}
-
-.hero-visual {
-  position: relative;
-  min-height: 138px;
-  display: grid;
-  place-items: center;
-  justify-items: end;
-}
-
-.hero-visual::before,
-.hero-visual::after {
-  content: "";
-  position: absolute;
-  border-radius: 999px;
-  filter: blur(2px);
-}
-
-.hero-visual::before {
-  width: 68%;
-  height: 30%;
-  bottom: 20px;
-  right: 8px;
-  background: radial-gradient(ellipse, rgba(7, 93, 255, 0.12), transparent 70%);
-}
-
-.hero-visual::after {
-  width: 78%;
-  height: 76%;
-  right: 0;
-  background:
-    radial-gradient(circle at 70% 20%, rgba(0, 184, 212, 0.12), transparent 30%),
-    radial-gradient(circle at 20% 80%, rgba(7, 93, 255, 0.1), transparent 36%);
-}
-
-.hero-logo-card {
-  position: relative;
-  z-index: 1;
-  width: min(100%, 320px);
-  padding: 10px;
-  border: 1px solid rgba(143, 167, 193, 0.28);
-  border-radius: 18px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 42%),
-    linear-gradient(145deg, #07172d, #0a1c36 58%, #04101f);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 16px 38px rgba(3, 20, 48, 0.18);
-}
-
-.hero-logo-card img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 12px;
-  filter: saturate(1.02) contrast(1.02);
 }
 
 .panel,
@@ -451,7 +428,6 @@ textarea:focus {
 
 @media (max-width: 980px) {
   .shell,
-  .hero,
   .invoice-grid,
   .customer-section {
     grid-template-columns: 1fr;
@@ -460,10 +436,24 @@ textarea:focus {
   .sidebar {
     position: relative;
     height: auto;
+    padding: 18px;
+    gap: 18px;
   }
 
-  .hero-visual {
-    min-height: 220px;
+  .brand {
+    align-items: center;
+  }
+
+  nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  nav a {
+    text-align: center;
+  }
+
+  .fiscal-card {
+    margin-top: 0;
   }
 
   .summary-card {
@@ -475,22 +465,88 @@ textarea:focus {
 @media (max-width: 620px) {
   main,
   .sidebar {
-    padding: 18px;
+    padding: 16px;
+  }
+
+  .shell {
+    min-height: auto;
+  }
+
+  .brand-mark {
+    width: 70px;
+    height: 46px;
+    flex-basis: 70px;
+    transform: perspective(420px) rotateX(5deg) rotateY(-5deg);
   }
 
   .hero {
-    padding: 22px;
+    padding: 20px;
     border-radius: 22px;
   }
 
-  .hero-logo-card {
+  .hero h1 {
+    font-size: clamp(2.15rem, 13vw, 3.25rem);
+  }
+
+  .hero-copy {
+    font-size: 1rem;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+
+  .panel-head {
+    display: grid;
+    gap: 14px;
+  }
+
+  .mode-switch {
+    width: 100%;
+  }
+
+  .mode-switch button {
+    flex: 1;
+  }
+
+  .invoice-grid {
+    gap: 14px;
+  }
+
+  fieldset {
     padding: 14px;
-    border-radius: 22px;
-    transform: rotateX(0) rotateY(0);
+    border-radius: 16px;
   }
 
   .two,
   .three {
     grid-template-columns: 1fr;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .summary-card button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  nav {
+    grid-template-columns: 1fr;
+  }
+
+  .brand {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 62px;
+    height: 42px;
+    flex-basis: 62px;
   }
 }
