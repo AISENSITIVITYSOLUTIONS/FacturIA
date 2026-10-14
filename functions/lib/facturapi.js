@@ -111,16 +111,23 @@ export async function facturapiStatus() {
   } catch {
     return { connected: false, reason: "missing", mode: null };
   }
-  const mode = secretKey.startsWith("sk_test_") ? "test" : secretKey.startsWith("sk_live_") ? "live" : "unknown";
-  if (mode === "unknown") {
-    return { connected: false, reason: "invalid_format", mode };
+  secretKey = secretKey.replace(/^["']|["']$/g, "");
+  if (secretKey.startsWith("sk_user_")) {
+    return { connected: false, reason: "user_key", mode: null };
   }
+  const mode = secretKey.startsWith("sk_test_") ? "test" : secretKey.startsWith("sk_live_") ? "live" : "unknown";
   try {
     const response = await fetch(`${BASE_URL}/customers?limit=1`, {
       headers: { "Authorization": `Bearer ${secretKey}` }
     });
     if (response.status === 401 || response.status === 403) {
       return { connected: false, reason: "rejected", mode };
+    }
+    if (response.ok && mode === "unknown") {
+      return { connected: true, reason: null, mode: "live" };
+    }
+    if (!response.ok && mode === "unknown") {
+      return { connected: false, reason: "invalid_format", mode };
     }
     return { connected: response.ok, reason: response.ok ? null : `http_${response.status}`, mode };
   } catch {

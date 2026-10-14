@@ -4,7 +4,8 @@ export const SHEETS = {
   invoices: "Facturas",
   payments: "Pagos",
   settings: "Configuracion",
-  audit: "Auditoria"
+  audit: "Auditoria",
+  locks: "Timbrados"
 };
 
 export const HEADERS = {
@@ -68,6 +69,18 @@ export const HEADERS = {
     "key",
     "value",
     "description"
+  ],
+  [SHEETS.locks]: [
+    "external_id",
+    "status",
+    "started_at",
+    "finished_at",
+    "actor",
+    "attempts",
+    "facturapi_id",
+    "uuid",
+    "result",
+    "error"
   ],
   [SHEETS.audit]: [
     "id",

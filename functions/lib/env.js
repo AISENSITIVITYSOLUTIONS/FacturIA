@@ -6,7 +6,7 @@ export const GOOGLE_SHEET_ID = defineSecret("GOOGLE_SHEET_ID");
 export const FACTURAI_ALLOWED_EMAILS = defineSecret("FACTURAI_ALLOWED_EMAILS");
 
 function cleanSecret(value) {
-  return String(value).replace(/^\uFEFF/, "").trim();
+  return String(value).replace(/^\uFEFF/, "").trim().replace(/^["']|["']$/g, "").trim();
 }
 
 export function readSecret(secret) {

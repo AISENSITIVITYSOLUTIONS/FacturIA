@@ -120,7 +120,7 @@ async function handle(req, res) {
     res.json({
       ok: true,
       service: "FacturIA",
-      version: "2026-10-13.3",
+      version: "2026-10-14.1",
       company: COMPANY_PROFILE.legalName,
       monthlyInvoiceEstimate: COMPANY_PROFILE.monthlyInvoiceEstimate
     });

@@ -165,7 +165,8 @@ function paintConnection(status) {
     title.textContent = "Facturapi sin conectar";
     detail.textContent = {
       missing: "Falta la llave secreta en Firebase.",
-      invalid_format: "La llave guardada no tiene formato sk_test_ o sk_live_.",
+      invalid_format: "La llave guardada no es una Secret Key de organización (sk_test_ o sk_live_).",
+      user_key: "Se guardó la llave de usuario (sk_user_). Usa la Secret Key de la organización.",
       rejected: "Facturapi rechazó la llave guardada.",
       network: "No se pudo contactar a Facturapi."
     }[status.reason] || "Revisa la configuración del servidor.";
