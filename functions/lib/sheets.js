@@ -1,51 +1,138 @@
 import { google } from "googleapis";
-import { GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID, readSecret } from "./env.js";
-import { HEADERS, SHEETS } from "../data/sheetSchema.js";
+import { GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID, readSecret, readSecretOrEmpty } from "./env.js";
+import { DEFAULT_PRODUCTS, HEADERS, SHEETS } from "../data/sheetSchema.js";
 
-function parseServiceAccount() {
-  const raw = readSecret(GOOGLE_SERVICE_ACCOUNT_JSON);
+const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
+
+/**
+ * Credenciales: si el secreto GOOGLE_SERVICE_ACCOUNT_JSON contiene una llave
+ * valida, se usa. Si no (vacio o un valor de relleno), se usa la cuenta de
+ * servicio con la que corre la funcion; basta con compartir la hoja con ella.
+ */
+function credentials() {
+  const raw = readSecretOrEmpty(GOOGLE_SERVICE_ACCOUNT_JSON);
+  if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return parsed.client_email && parsed.private_key ? parsed : null;
   } catch {
-    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON no es JSON valido");
+    return null;
   }
 }
 
+let cachedClient = null;
 async function client() {
-  const credentials = parseServiceAccount();
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"]
-  });
-  return google.sheets({ version: "v4", auth });
+  if (cachedClient) return cachedClient;
+  const creds = credentials();
+  const auth = new google.auth.GoogleAuth(creds ? { credentials: creds, scopes: SCOPES } : { scopes: SCOPES });
+  cachedClient = google.sheets({ version: "v4", auth });
+  return cachedClient;
 }
 
 function sheetId() {
   return readSecret(GOOGLE_SHEET_ID);
 }
 
+function sheetsError(error) {
+  const status = error?.code || error?.response?.status;
+  if (status === 403) {
+    const e = new Error("Google Sheets rechazo el acceso. Comparte la hoja como Editor con la cuenta de servicio de la funcion.");
+    e.status = 503;
+    return e;
+  }
+  if (status === 404) {
+    const e = new Error("No se encontro la hoja de Google Sheets. Revisa el secreto GOOGLE_SHEET_ID.");
+    e.status = 503;
+    return e;
+  }
+  return error;
+}
+
+/**
+ * Crea las pestanas y encabezados que falten (una vez por instancia), y
+ * siembra el catalogo con los conceptos base si la pestana es nueva.
+ */
+let ensured = null;
+async function ensureSheets() {
+  if (ensured) return ensured;
+  ensured = (async () => {
+    const sheets = await client();
+    const spreadsheetId = sheetId();
+    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" });
+    const existing = new Set((meta.data.sheets || []).map((s) => s.properties.title));
+    const missing = Object.values(SHEETS).filter((title) => !existing.has(title));
+
+    if (missing.length) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests: missing.map((title) => ({ addSheet: { properties: { title, gridProperties: { frozenRowCount: 1 } } } })) }
+      });
+    }
+
+    const tabs = Object.values(SHEETS);
+    const heads = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges: tabs.map((t) => `${t}!1:1`) });
+    const updates = [];
+    tabs.forEach((tab, i) => {
+      const current = heads.data.valueRanges?.[i]?.values?.[0] || [];
+      const expected = HEADERS[tab];
+      const isPrefix = current.every((h, j) => h === expected[j]);
+      if (isPrefix && current.length < expected.length) {
+        updates.push({ range: `${tab}!A1`, values: [expected] });
+      }
+    });
+    if (updates.length) {
+      await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: "RAW", data: updates } });
+    }
+
+    if (missing.includes(SHEETS.products)) {
+      const now = new Date().toISOString();
+      const rows = DEFAULT_PRODUCTS.map((p) => HEADERS[SHEETS.products].map((k) =>
+        k === "id" ? crypto.randomUUID() : k === "created_at" ? now : (p[k] ?? "")));
+      await sheets.spreadsheets.values.append({
+        spreadsheetId, range: `${SHEETS.products}!A:Z`, valueInputOption: "RAW", requestBody: { values: rows }
+      });
+    }
+  })().catch((error) => {
+    ensured = null;
+    throw sheetsError(error);
+  });
+  return ensured;
+}
+
 export async function appendRow(tab, row) {
+  await ensureSheets();
   const sheets = await client();
   const headers = HEADERS[tab] || Object.keys(row);
   const values = headers.map((key) => row[key] ?? "");
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: sheetId(),
-    range: `${tab}!A:Z`,
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values: [values] }
-  });
+  try {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId(),
+      range: `${tab}!A:Z`,
+      valueInputOption: "RAW",
+      requestBody: { values: [values] }
+    });
+  } catch (error) {
+    throw sheetsError(error);
+  }
   return row;
 }
 
 export async function listRows(tab, limit = 200) {
+  await ensureSheets();
   const sheets = await client();
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId(),
-    range: `${tab}!A1:Z${limit + 1}`
-  });
+  let response;
+  try {
+    response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${tab}!A1:Z`
+    });
+  } catch (error) {
+    throw sheetsError(error);
+  }
   const [headers = [], ...rows] = response.data.values || [];
   return rows
     .filter((row) => row.length)
+    .slice(-limit)
     .map((row) => Object.fromEntries(headers.map((key, index) => [key, row[index] || ""])));
 }
 
@@ -61,15 +148,17 @@ export async function audit(action, resource, payload, actor = "system") {
 }
 
 export async function dashboard() {
-  const invoices = await listRows(SHEETS.invoices, 500);
+  const invoices = await listRows(SHEETS.invoices, 2000);
   const now = new Date();
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const monthInvoices = invoices.filter((invoice) => String(invoice.created_at || "").startsWith(month));
   const totals = monthInvoices.reduce((acc, invoice) => {
     const total = Number(invoice.total || 0);
-    acc.total += Number.isFinite(total) ? total : 0;
-    acc.count += 1;
-    if (invoice.status === "stamped") acc.stamped += 1;
+    if (invoice.status === "stamped") {
+      acc.total += Number.isFinite(total) ? total : 0;
+      acc.count += 1;
+      acc.stamped += 1;
+    }
     if (invoice.status === "draft") acc.draft += 1;
     if (invoice.status === "cancelled") acc.cancelled += 1;
     return acc;

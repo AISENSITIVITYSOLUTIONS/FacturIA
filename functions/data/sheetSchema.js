@@ -50,7 +50,8 @@ export const HEADERS = {
     "cfdi_use",
     "pdf_url",
     "xml_url",
-    "error"
+    "error",
+    "actor"
   ],
   [SHEETS.payments]: [
     "id",

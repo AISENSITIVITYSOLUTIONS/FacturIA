@@ -10,27 +10,26 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Saira:ital,wght@0,500;1,700;1,800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=4" />
+    <link rel="stylesheet" href="/styles.css?v=5" />
     <link rel="modulepreload" href="/vendor/three.module.min.js" />
     <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
   </head>
   <body>
     <!-- Acceso -->
     <div class="gate" id="gate" hidden>
-      <form class="gate-card" id="gate-form" autocomplete="off">
+      <div class="gate-card" id="gate-card">
         <img class="gate-logo" src="/assets/z-logo-alpha.png" alt="Z Personal Electric Vehicle" />
         <div class="gate-copy">
-          <span class="eyebrow">FacturAI · Acceso</span>
           <h1>Facturación CFDI 4.0</h1>
-          <p>Ingresa el código de acceso de Z E-Scooters México para emitir y consultar facturas.</p>
+          <p id="gate-copy">Entra con la cuenta de Google autorizada por Z E-Scooters México.</p>
         </div>
-        <label class="field">
-          <span class="field-label">Código de acceso</span>
-          <input class="input mono" type="password" name="code" required autocomplete="current-password" />
-        </label>
-        <button class="btn btn-primary btn-lg" type="submit">Entrar</button>
+        <button class="btn btn-google btn-lg" type="button" id="btn-google" disabled>
+          <svg aria-hidden="true" viewBox="0 0 24 24" class="g-logo"><path fill="#4285F4" stroke="none" d="M21.6 12.23c0-.68-.06-1.36-.18-2H12v3.79h5.4a4.62 4.62 0 0 1-2 3.03v2.5h3.24c1.9-1.75 2.96-4.33 2.96-7.32z"/><path fill="#34A853" stroke="none" d="M12 22c2.7 0 4.98-.9 6.64-2.43l-3.24-2.5c-.9.6-2.05.96-3.4.96-2.6 0-4.81-1.76-5.6-4.12H3.06v2.58A10 10 0 0 0 12 22z"/><path fill="#FBBC05" stroke="none" d="M6.4 13.9a6 6 0 0 1 0-3.8V7.52H3.06a10 10 0 0 0 0 8.96L6.4 13.9z"/><path fill="#EA4335" stroke="none" d="M12 5.98c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2 10 10 0 0 0 3.06 7.52L6.4 10.1C7.19 7.74 9.4 5.98 12 5.98z"/></svg>
+          <span id="btn-google-label">Verificando sesión…</span>
+        </button>
+        <button class="link-btn gate-switch" type="button" id="btn-switch" hidden>Usar otra cuenta</button>
         <p class="gate-error" id="gate-error" role="alert"></p>
-      </form>
+      </div>
     </div>
 
     <div class="shell">
@@ -87,7 +86,10 @@
             <span class="sep" aria-hidden="true"></span>
             <span>Lugar de expedición <span class="mono">11800</span></span>
           </div>
-          <button class="btn btn-ghost btn-sm" type="button" id="logout">Salir</button>
+          <div class="session">
+            <span class="session-user" id="session-user"></span>
+            <button class="btn btn-ghost btn-sm" type="button" id="logout">Salir</button>
+          </div>
         </header>
 
         <!-- ============ FACTURAR ============ -->
@@ -428,6 +430,6 @@
     </template>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js?v=4" type="module"></script>
+    <script src="/app.js?v=5" type="module"></script>
   </body>
 </html>
