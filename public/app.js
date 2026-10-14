@@ -399,7 +399,7 @@ function showSuccess(data, kind, payload) {
   copy.replaceChildren();
   if (isDraft) {
     copy.textContent = "El borrador quedó en Facturapi. Podrás timbrarlo desde su panel cuando esté listo.";
-  } else if (data.emailed) {
+  } else if (data.emailed && payload.customer.email) {
     copy.append("El comprobante ya tiene validez fiscal. Se envió PDF y XML a ");
     const s = document.createElement("strong");
     s.textContent = payload.customer.email;
@@ -602,6 +602,41 @@ function toast(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, 4200);
 }
+
+/* ------------------------------------------------- Portada con relieve */
+
+// La placa se inclina hacia el puntero y un reflejo especular lo sigue.
+// Se desactiva en pantallas táctiles y con "reducir movimiento".
+(function tiltHero() {
+  const plate = $(".hero-plate");
+  if (!plate) return;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const finePointer = window.matchMedia("(pointer: fine)").matches;
+  if (reduce || !finePointer) return;
+  const MAX = 6;
+  let frame = 0;
+  plate.addEventListener("pointermove", (event) => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      const r = plate.getBoundingClientRect();
+      const x = (event.clientX - r.left) / r.width;
+      const y = (event.clientY - r.top) / r.height;
+      plate.classList.add("is-tracking");
+      plate.style.setProperty("--ry", `${((x - 0.5) * 2 * MAX).toFixed(2)}deg`);
+      plate.style.setProperty("--rx", `${((0.5 - y) * 2 * MAX * 0.6).toFixed(2)}deg`);
+      plate.style.setProperty("--mx", `${(x * 100).toFixed(1)}%`);
+      plate.style.setProperty("--my", `${(y * 100).toFixed(1)}%`);
+    });
+  });
+  plate.addEventListener("pointerleave", () => {
+    cancelAnimationFrame(frame);
+    plate.classList.remove("is-tracking");
+    plate.style.setProperty("--rx", "0deg");
+    plate.style.setProperty("--ry", "0deg");
+    plate.style.setProperty("--mx", "70%");
+    plate.style.setProperty("--my", "20%");
+  });
+})();
 
 /* ---------------------------------------------------------------- Boot */
 
