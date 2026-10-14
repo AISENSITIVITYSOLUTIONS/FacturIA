@@ -12,10 +12,10 @@ Configurar en Firebase Functions:
 firebase functions:secrets:set FACTURAPI_SECRET_KEY --project facturia
 firebase functions:secrets:set GOOGLE_SERVICE_ACCOUNT_JSON --project facturia
 firebase functions:secrets:set GOOGLE_SHEET_ID --project facturia
-firebase functions:secrets:set FACTURAI_ACCESS_CODE --project facturia
+firebase functions:secrets:set FACTURAI_ALLOWED_EMAILS --project facturia
 ```
 
-`FACTURAI_ACCESS_CODE` es el codigo que el equipo de Z E-Scooters escribe al entrar a la app. Sin el, la API rechaza toda operacion (excepto `/api/health`). Usar una frase larga y compartirla solo con quien factura.
+`FACTURAI_ALLOWED_EMAILS` es la lista de cuentas de Google autorizadas (correos o `@dominio`). Sin ella, la API rechaza toda operacion (excepto `/api/health`). Ver `docs/PRODUCCION.md`.
 
 La llave de Facturapi debe iniciar con `sk_test_` (pruebas) o `sk_live_` (produccion). La barra lateral muestra en que modo esta conectada.
 
@@ -48,7 +48,7 @@ El emisor se configura en el panel de Facturapi con:
 | `POST /api/invoices/:id/email` | Reenviar por correo |
 | `POST /api/invoices/:id/cancel` | Cancelar CFDI |
 
-Todas las rutas, salvo `/api/health`, exigen el encabezado `X-Access-Code`.
+Todas las rutas, salvo `/api/health`, exigen `Authorization: Bearer <idToken>` de Firebase Authentication con un correo autorizado.
 
 ## Pendientes antes de produccion
 

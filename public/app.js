@@ -2,7 +2,8 @@
 // Toda operación fiscal pasa por /api (Firebase Functions); la llave de
 // Facturapi vive como secreto en el servidor y nunca llega al navegador.
 
-const CODE_KEY = "facturai.access";
+import { initAuth, signIn, signOut, idToken } from "/auth.js?v=5";
+
 const GENERIC_RFC = new Set(["XAXX010101000", "XEXX010101000"]);
 const RFC_RE = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
 const EMISOR_ZIP = "11800";
@@ -13,14 +14,10 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 const dateFmt = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
-const store = {
-  get() { try { return sessionStorage.getItem(CODE_KEY) || ""; } catch { return ""; } },
-  set(v) { try { sessionStorage.setItem(CODE_KEY, v); } catch { /* sin almacenamiento */ } },
-  clear() { try { sessionStorage.removeItem(CODE_KEY); } catch { /* sin almacenamiento */ } }
-};
-
-let accessCode = store.get();
 let lastInvoice = null;
+// Identificador fijo de la factura en captura: se conserva en todos los
+// reintentos para que el servidor nunca timbre dos veces la misma venta.
+let captureId = crypto.randomUUID();
 let customersCache = [];
 
 /* ------------------------------------------------------------------ API */
@@ -30,17 +27,19 @@ class ApiError extends Error {
 }
 
 async function api(path, { method = "GET", body, raw = false } = {}) {
+  const token = await idToken();
   const response = await fetch(`/api${path}`, {
     method,
     headers: {
-      "X-Access-Code": accessCode,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(body ? { "Content-Type": "application/json" } : {})
     },
     body: body ? JSON.stringify(body) : undefined
   });
 
   if (response.status === 401) {
-    showGate("El código de acceso no es válido o expiró.");
+    const payload = await response.json().catch(() => ({}));
+    showGate(payload.error || "Tu sesión expiró. Vuelve a entrar.");
     throw new ApiError("Acceso requerido", 401);
   }
   if (raw && response.ok) return response;
@@ -71,32 +70,62 @@ function friendlyError(payload, status) {
 
 /* --------------------------------------------------------------- Acceso */
 
-function showGate(message = "") {
-  store.clear();
-  accessCode = "";
-  $("#gate").hidden = false;
-  $("#gate-error").textContent = message;
-  setTimeout(() => $("#gate-form input")?.focus(), 30);
+const googleBtn = $("#btn-google");
+const googleLabel = $("#btn-google-label");
+
+function setGateBusy(text) {
+  googleBtn.disabled = true;
+  googleLabel.textContent = text;
 }
 
-$("#gate-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const input = event.currentTarget.elements.code;
-  accessCode = input.value.trim();
-  $("#gate-error").textContent = "";
+function setGateReady() {
+  googleBtn.disabled = false;
+  googleLabel.textContent = "Entrar con Google";
+}
+
+function showGate(message = "", { switchAccount = false } = {}) {
+  $("#gate").hidden = false;
+  $("#gate-error").textContent = message;
+  $("#btn-switch").hidden = !switchAccount;
+  setGateReady();
+}
+
+async function openSession(user) {
+  setGateBusy("Verificando acceso…");
   try {
     const { data } = await api("/session");
-    store.set(accessCode);
     $("#gate").hidden = true;
-    input.value = "";
+    $("#session-user").textContent = data.user?.email || user.email || "";
     paintConnection(data.facturapi);
     boot();
   } catch (error) {
-    if (error.status !== 401) $("#gate-error").textContent = error.message;
+    if (error.status === 401) return;
+    showGate(error.message, { switchAccount: error.status === 403 });
   }
+}
+
+googleBtn.addEventListener("click", async () => {
+  $("#gate-error").textContent = "";
+  setGateBusy("Abriendo Google…");
+  try {
+    await signIn();
+  } catch (error) {
+    showGate(error.message);
+    return;
+  }
+  setGateReady();
 });
 
-$("#logout").addEventListener("click", () => showGate());
+$("#btn-switch").addEventListener("click", async () => {
+  await signOut();
+  $("#gate-error").textContent = "";
+  googleBtn.click();
+});
+
+$("#logout").addEventListener("click", async () => {
+  await signOut();
+  location.hash = "#facturar";
+});
 
 /* ---------------------------------------------------------- Navegación */
 
@@ -371,7 +400,7 @@ async function emit(kind) {
   try {
     const { data } = await api(kind === "stamp" ? "/invoices/stamp" : "/invoices/draft", {
       method: "POST",
-      body: { ...payload, external_id: crypto.randomUUID() }
+      body: { ...payload, external_id: captureId }
     });
     setStatus("");
     showSuccess(data, kind, payload);
@@ -468,6 +497,7 @@ $("#btn-resend").addEventListener("click", async () => {
 
 $("#btn-new").addEventListener("click", () => {
   form.reset();
+  captureId = crypto.randomUUID();
   linesEl.replaceChildren();
   addLine();
   lastInvoice = null;
@@ -695,15 +725,17 @@ function boot() {
 addLine();
 refresh();
 
-if (!accessCode) {
-  showGate();
-} else {
-  api("/session")
-    .then(({ data }) => { paintConnection(data.facturapi); boot(); })
-    .catch((error) => {
-      if (error.status !== 401) {
-        paintConnection({ connected: false, reason: "network" });
-        boot();
-      }
-    });
-}
+$("#gate").hidden = false;
+setGateBusy("Verificando sesión…");
+initAuth((user) => {
+  if (user) {
+    openSession(user);
+  } else {
+    $("#session-user").textContent = "";
+    showGate();
+  }
+}).catch((error) => {
+  console.error(error);
+  showGate("No se pudo cargar el inicio de sesión. Revisa tu conexión y recarga la página.");
+  googleBtn.disabled = true;
+});

@@ -591,6 +591,15 @@ input[type="number"].input::-webkit-inner-spin-button { opacity: 0.4; }
 .gate .input { background: rgba(7, 13, 24, 0.7); border-color: var(--ink-3); color: #fff; }
 .gate .input:focus { border-color: #fff; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08); }
 .gate-error { min-height: 18px; font-size: 13px; color: #FF8A7E; }
+.gate-error:empty { display: none; }
+.btn-google { width: 100%; background: #fff; color: #1F2937; border-color: #fff; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 14px 28px -14px rgba(0, 0, 0, 0.7); }
+.btn-google:hover:not(:disabled) { transform: translateY(-1px); background: #F5F8FF; }
+.btn-google:disabled { opacity: 0.7; cursor: progress; }
+.btn-google .g-logo { width: 20px; height: 20px; }
+.gate-switch { align-self: center; color: #C3CEDD; font-size: 13px; }
+.session { display: flex; align-items: center; gap: 10px; }
+.session-user { font-size: 13px; color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { .session-user { display: none; } }
 
 /* ---------- Toast ---------- */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; max-width: min(520px, calc(100vw - 32px)); padding: 14px 18px; border-radius: 14px; background: var(--brushed), var(--metal-dark); color: #fff; font-size: 14px; box-shadow: 0 20px 40px -16px rgba(0, 0, 0, 0.5); }

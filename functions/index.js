@@ -3,10 +3,11 @@ import { initializeApp } from "firebase-admin/app";
 import { COMPANY_PROFILE, DEFAULT_INVOICE_SETTINGS } from "./config/company.js";
 import { SHEETS } from "./data/sheetSchema.js";
 import { appendRow, audit, dashboard, listRows } from "./lib/sheets.js";
-import { timingSafeEqual } from "node:crypto";
+import { requireUser } from "./lib/auth.js";
+import { acquireStampLock, completeStampLock, releaseStampLock } from "./lib/idempotency.js";
 import { cancelInvoice, createDraft, createInvoice, downloadInvoiceFile, facturapiStatus, pdfUrl, sendInvoiceByEmail, xmlUrl } from "./lib/facturapi.js";
 import { validateCustomer, validateInvoiceDraft, sendError, httpError } from "./lib/validators.js";
-import { FACTURAI_ACCESS_CODE, FACTURAPI_SECRET_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID, readSecretOrEmpty } from "./lib/env.js";
+import { FACTURAI_ALLOWED_EMAILS, FACTURAPI_SECRET_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID } from "./lib/env.js";
 
 initializeApp();
 
@@ -14,31 +15,14 @@ const runtimeSecrets = [
   FACTURAPI_SECRET_KEY,
   GOOGLE_SERVICE_ACCOUNT_JSON,
   GOOGLE_SHEET_ID,
-  FACTURAI_ACCESS_CODE
+  FACTURAI_ALLOWED_EMAILS
 ];
 
 function cors(res) {
   // La interfaz se sirve desde el mismo dominio (rewrite /api/**), por eso no se abre CORS a terceros.
   res.set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Access-Code");
+  res.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
   res.set("Cache-Control", "no-store");
-}
-
-/**
- * Solo quien conoce el codigo de acceso (secreto FACTURAI_ACCESS_CODE) puede
- * leer clientes o timbrar. Falla cerrado: si el secreto no existe, nadie entra.
- */
-function assertAccess(req) {
-  const expected = readSecretOrEmpty(FACTURAI_ACCESS_CODE);
-  const provided = String(req.get("X-Access-Code") || "").trim();
-  if (!expected) {
-    throw httpError(503, "Falta configurar el secreto FACTURAI_ACCESS_CODE en Firebase.");
-  }
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    throw httpError(401, "Codigo de acceso incorrecto.");
-  }
 }
 
 /**
@@ -136,17 +120,17 @@ async function handle(req, res) {
     res.json({
       ok: true,
       service: "FacturIA",
-      version: "2026-10-13.2",
+      version: "2026-10-13.3",
       company: COMPANY_PROFILE.legalName,
       monthlyInvoiceEstimate: COMPANY_PROFILE.monthlyInvoiceEstimate
     });
     return;
   }
 
-  assertAccess(req);
+  const user = await requireUser(req);
 
   if (method === "GET" && path === "/session") {
-    res.json({ ok: true, data: { facturapi: await facturapiStatus() } });
+    res.json({ ok: true, data: { user: { email: user.email, name: user.name }, facturapi: await facturapiStatus() } });
     return;
   }
 
@@ -199,7 +183,7 @@ async function handle(req, res) {
       default_use: "G03",
       notes: ""
     });
-    await audit("create_customer", "customer", row);
+    await audit("create_customer", "customer", row, user.email);
     res.status(201).json({ ok: true, data: row });
     return;
   }
@@ -223,7 +207,7 @@ async function handle(req, res) {
       tax_rate: Number(body.tax_rate ?? 0.16),
       active: body.active ?? "SI"
     });
-    await audit("create_product", "product", row);
+    await audit("create_product", "product", row, user.email);
     res.status(201).json({ ok: true, data: row });
     return;
   }
@@ -234,7 +218,7 @@ async function handle(req, res) {
     const row = rowFromInvoice(payload.external_id, payload, draft, "draft");
     const warning = await safeLog(async () => {
       await appendRow(SHEETS.invoices, row);
-      await audit("create_invoice_draft", "invoice", { localId: payload.external_id, facturapiId: draft.id });
+      await audit("create_invoice_draft", "invoice", { localId: payload.external_id, facturapiId: draft.id }, user.email);
     });
     res.status(201).json({ ok: true, data: { invoice: draft, row, warnings: warning ? [warning] : [] } });
     return;
@@ -242,8 +226,24 @@ async function handle(req, res) {
 
   if (method === "POST" && path === "/invoices/stamp") {
     const payload = validateInvoiceDraft(jsonBody(req));
-    const invoice = await createInvoice(payload);
-    const row = rowFromInvoice(payload.external_id, payload, invoice, "stamped");
+    const externalId = payload.external_id;
+
+    // Candado: si esta captura ya se timbro, se devuelve el mismo CFDI.
+    const lock = await acquireStampLock(externalId, user);
+    if (lock.existing) {
+      res.status(200).json({ ok: true, data: { ...lock.existing, replayed: true, warnings: ["Esta factura ya se habia timbrado; se muestra el mismo CFDI."] } });
+      return;
+    }
+
+    let invoice;
+    try {
+      invoice = await createInvoice(payload);
+    } catch (error) {
+      await releaseStampLock(externalId, error.message);
+      throw error;
+    }
+
+    const row = rowFromInvoice(externalId, payload, invoice, "stamped");
     const warnings = [];
     let emailed = false;
     if (payload.customer.email) {
@@ -255,13 +255,21 @@ async function handle(req, res) {
         warnings.push("El CFDI se emitio, pero el correo al cliente no se envio. Puedes reenviarlo.");
       }
     }
+
+    const result = { invoice, row, emailed };
+    try {
+      await completeStampLock(externalId, result);
+    } catch (error) {
+      console.error("No se pudo cerrar el candado de timbrado", error);
+    }
+
     const logWarning = await safeLog(async () => {
-      await appendRow(SHEETS.invoices, row);
-      await audit("stamp_invoice", "invoice", { localId: payload.external_id, facturapiId: invoice.id, uuid: invoice.uuid });
+      await appendRow(SHEETS.invoices, { ...row, actor: user.email });
+      await audit("stamp_invoice", "invoice", { localId: externalId, facturapiId: invoice.id, uuid: invoice.uuid }, user.email);
       await upsertCustomer(payload);
     });
     if (logWarning) warnings.push(logWarning);
-    res.status(201).json({ ok: true, data: { invoice, row, emailed, warnings } });
+    res.status(201).json({ ok: true, data: { ...result, warnings } });
     return;
   }
 
@@ -301,7 +309,7 @@ async function handle(req, res) {
       xml_url: "",
       error: ""
     });
-    await audit("cancel_invoice", "invoice", { facturapiId: invoiceId, motive: body.motive || "02" });
+    await audit("cancel_invoice", "invoice", { facturapiId: invoiceId, motive: body.motive || "02" }, user.email);
     res.json({ ok: true, data: cancelled });
     return;
   }
