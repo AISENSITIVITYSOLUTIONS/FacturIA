@@ -710,6 +710,57 @@ async function playStamp() {
   } catch { /* se queda la palomita */ }
 }
 
+/* ---------------------------------------------------- App instalable */
+
+(function installable() {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => null));
+  }
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  if (standalone) return;
+
+  const KEY = "facturai.install.dismissed";
+  const dismissed = () => { try { return Date.now() - Number(localStorage.getItem(KEY) || 0) < 14 * 864e5; } catch { return false; } };
+  const banner = $("#install");
+  const btn = $("#install-btn");
+  const close = () => {
+    banner.hidden = true;
+    try { localStorage.setItem(KEY, String(Date.now())); } catch { /* sin almacenamiento */ }
+  };
+  $("#install-close").addEventListener("click", close);
+
+  // Android, Chrome y Edge: aviso nativo de instalación.
+  let deferred = null;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferred = event;
+    if (!dismissed()) {
+      btn.hidden = false;
+      banner.hidden = false;
+    }
+  });
+  btn.addEventListener("click", async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice.catch(() => null);
+    deferred = null;
+    banner.hidden = true;
+  });
+  window.addEventListener("appinstalled", () => { banner.hidden = true; toast("FacturAI quedó instalada en tu dispositivo."); });
+
+  // iPhone y iPad (Safari): no hay aviso nativo; se explica el gesto.
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+  if (isIOS && !dismissed()) {
+    $("#install-text").textContent = isSafari
+      ? "Toca Compartir y luego «Agregar a pantalla de inicio»."
+      : "Abre esta página en Safari para instalarla en tu pantalla de inicio.";
+    btn.hidden = true;
+    setTimeout(() => { banner.hidden = false; }, 2500);
+  }
+})();
+
 /* ---------------------------------------------------------------- Boot */
 
 let booted = false;

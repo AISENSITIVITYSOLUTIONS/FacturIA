@@ -624,3 +624,36 @@ input[type="number"].input::-webkit-inner-spin-button { opacity: 0.4; }
   .hero-stage { margin: 0 auto; width: 210px; }
   .parties { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- App instalable ---------- */
+.install {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 55;
+  width: min(520px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 18px;
+  background: var(--brushed), linear-gradient(160deg, #12223C 0%, #0A1426 100%);
+  border: 1px solid rgba(160, 195, 240, 0.25);
+  color: #fff;
+  box-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.7);
+  animation: rise 0.4s cubic-bezier(.2,.8,.2,1);
+}
+.install img { border-radius: 11px; flex: none; }
+.install-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.install-copy strong { font-size: 14px; }
+.install-copy span { font-size: 12.5px; color: #B8C3D4; line-height: 1.4; }
+.install-close { color: #B8C3D4; width: 36px; height: 36px; }
+.install-close:hover { background: rgba(255, 255, 255, 0.08); border-color: transparent; color: #fff; }
+
+/* En modo app (pantalla completa) respeta las zonas seguras del teléfono */
+@media (display-mode: standalone) {
+  .sidebar { padding-top: max(16px, env(safe-area-inset-top)); }
+  .topbar { padding-top: max(16px, env(safe-area-inset-top)); }
+  .view { padding-bottom: max(72px, calc(env(safe-area-inset-bottom) + 40px)); }
+}
