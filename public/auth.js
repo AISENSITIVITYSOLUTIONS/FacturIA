@@ -15,11 +15,8 @@ export async function initAuth(onChange) {
     if (!r.ok) throw new Error("No se pudo leer la configuración de Firebase.");
     return r.json();
   });
-  // En Firebase Hosting el propio dominio atiende /__/auth/handler; usarlo como
-  // authDomain evita problemas de cookies de terceros en Safari y Chrome.
-  if (/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) {
-    config.authDomain = location.hostname;
-  }
+  // Se usa el authDomain que entrega Firebase (<proyecto>.firebaseapp.com), que
+  // ya está registrado en el cliente OAuth de Google.
 
   const app = initializeApp(config);
   const auth = authMod.getAuth(app);

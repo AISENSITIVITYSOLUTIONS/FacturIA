@@ -2,7 +2,7 @@
 // Toda operación fiscal pasa por /api (Firebase Functions); la llave de
 // Facturapi vive como secreto en el servidor y nunca llega al navegador.
 
-import { initAuth, signIn, signOut, idToken } from "/auth.js?v=5";
+import { initAuth, signIn, signOut, idToken } from "/auth.js?v=6";
 
 const GENERIC_RFC = new Set(["XAXX010101000", "XEXX010101000"]);
 const RFC_RE = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
