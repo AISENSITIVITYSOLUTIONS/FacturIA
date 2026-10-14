@@ -62,8 +62,8 @@ function friendlyError(payload, status) {
   if (/api ?key|invalid key|clave de api/i.test(message) || (status === 401 && /facturapi/i.test(message))) {
     return "Facturapi rechazó la llave secreta. Revisa FACTURAPI_SECRET_KEY en Firebase.";
   }
-  if (/missing secret: google|sheets/i.test(message)) {
-    return "Google Sheets aún no está conectado; esta sección se activará al configurarlo.";
+  if (/missing secret: google/i.test(message)) {
+    return "Google Sheets aún no está conectado: falta configurar el secreto en Firebase.";
   }
   return message;
 }

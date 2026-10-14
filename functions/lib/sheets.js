@@ -21,12 +21,27 @@ function credentials() {
 }
 
 let cachedClient = null;
+let cachedAuth = null;
 async function client() {
   if (cachedClient) return cachedClient;
   const creds = credentials();
-  const auth = new google.auth.GoogleAuth(creds ? { credentials: creds, scopes: SCOPES } : { scopes: SCOPES });
-  cachedClient = google.sheets({ version: "v4", auth });
+  cachedAuth = new google.auth.GoogleAuth(creds ? { credentials: creds, scopes: SCOPES } : { scopes: SCOPES });
+  cachedClient = google.sheets({ version: "v4", auth: cachedAuth });
   return cachedClient;
+}
+
+/** Correo de la cuenta con la que la funcion entra a la hoja (para diagnostico). */
+let cachedEmail = "";
+export async function sheetsAccountEmail() {
+  if (cachedEmail) return cachedEmail;
+  try {
+    await client();
+    const creds = await cachedAuth.getCredentials();
+    cachedEmail = creds.client_email || "";
+  } catch {
+    cachedEmail = "";
+  }
+  return cachedEmail;
 }
 
 function sheetId() {
@@ -35,17 +50,21 @@ function sheetId() {
 
 function sheetsError(error) {
   const status = error?.code || error?.response?.status;
+  const detail = String(error?.response?.data?.error?.message || error?.message || "");
+  const make = (msg) => { const e = new Error(msg); e.status = 503; e.sheets = true; return e; };
+  if (/has not been used|is disabled|SERVICE_DISABLED/i.test(detail)) {
+    return make("La API de Google Sheets no esta habilitada en el proyecto facturia-zscooters.");
+  }
   if (status === 403) {
-    const e = new Error("Google Sheets rechazo el acceso. Comparte la hoja como Editor con la cuenta de servicio de la funcion.");
-    e.status = 503;
-    return e;
+    return make(`Google Sheets rechazo el acceso. Comparte la hoja como Editor con ${cachedEmail || "la cuenta de servicio de la funcion"}.`);
   }
   if (status === 404) {
-    const e = new Error("No se encontro la hoja de Google Sheets. Revisa el secreto GOOGLE_SHEET_ID.");
-    e.status = 503;
-    return e;
+    return make("No se encontro la hoja de Google Sheets. Revisa el secreto GOOGLE_SHEET_ID.");
   }
-  return error;
+  if (/Missing secret: GOOGLE_SHEET_ID/.test(detail)) {
+    return make("Falta el secreto GOOGLE_SHEET_ID.");
+  }
+  return make(`Google Sheets respondio con un error: ${detail.slice(0, 200)}`);
 }
 
 /**
@@ -55,6 +74,7 @@ function sheetsError(error) {
 let ensured = null;
 async function ensureSheets() {
   if (ensured) return ensured;
+  await sheetsAccountEmail();
   ensured = (async () => {
     const sheets = await client();
     const spreadsheetId = sheetId();
