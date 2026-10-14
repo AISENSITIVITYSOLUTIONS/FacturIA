@@ -136,6 +136,43 @@ export async function listRows(tab, limit = 200) {
     .map((row) => Object.fromEntries(headers.map((key, index) => [key, row[index] || ""])));
 }
 
+/** Busca la primera fila cuya columna `key` sea `value`. Devuelve { rowNumber, row } o null. */
+export async function findRow(tab, key, value) {
+  await ensureSheets();
+  const sheets = await client();
+  let response;
+  try {
+    response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId(), range: `${tab}!A1:Z` });
+  } catch (error) {
+    throw sheetsError(error);
+  }
+  const [headers = [], ...rows] = response.data.values || [];
+  const col = headers.indexOf(key);
+  if (col < 0) return null;
+  const index = rows.findIndex((r) => r[col] === String(value));
+  if (index < 0) return null;
+  const row = Object.fromEntries(headers.map((h, i) => [h, rows[index][i] || ""]));
+  return { rowNumber: index + 2, row };
+}
+
+/** Reescribe una fila completa (rowNumber es 1-based, incluye encabezado). */
+export async function updateRow(tab, rowNumber, row) {
+  await ensureSheets();
+  const sheets = await client();
+  const headers = HEADERS[tab];
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId(),
+      range: `${tab}!A${rowNumber}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [headers.map((k) => row[k] ?? "")] }
+    });
+  } catch (error) {
+    throw sheetsError(error);
+  }
+  return row;
+}
+
 export async function audit(action, resource, payload, actor = "system") {
   return appendRow(SHEETS.audit, {
     id: crypto.randomUUID(),
