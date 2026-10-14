@@ -135,6 +135,13 @@ export async function facturapiStatus() {
   }
 }
 
+export async function getInvoice(invoiceId) {
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(invoiceId))) {
+    throw httpError(400, "Identificador de factura invalido");
+  }
+  return request(`/invoices/${invoiceId}`, { method: "GET" });
+}
+
 export function pdfUrl(invoiceId) {
   return `/api/invoices/${invoiceId}/pdf`;
 }
