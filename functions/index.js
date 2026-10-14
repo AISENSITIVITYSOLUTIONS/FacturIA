@@ -5,7 +5,8 @@ import { SHEETS } from "./data/sheetSchema.js";
 import { appendRow, audit, dashboard, listRows } from "./lib/sheets.js";
 import { requireUser } from "./lib/auth.js";
 import { acquireStampLock, completeStampLock, releaseStampLock } from "./lib/idempotency.js";
-import { cancelInvoice, createDraft, createInvoice, downloadInvoiceFile, facturapiStatus, pdfUrl, sendInvoiceByEmail, xmlUrl } from "./lib/facturapi.js";
+import { cancelInvoice, createDraft, createInvoice, downloadInvoiceFile, facturapiStatus, getInvoice, pdfUrl, sendInvoiceByEmail, xmlUrl } from "./lib/facturapi.js";
+import { renderCfdiPdf } from "./lib/cfdiPdf.js";
 import { validateCustomer, validateInvoiceDraft, sendError, httpError } from "./lib/validators.js";
 import { FACTURAI_ALLOWED_EMAILS, FACTURAPI_SECRET_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID } from "./lib/env.js";
 
@@ -120,7 +121,7 @@ async function handle(req, res) {
     res.json({
       ok: true,
       service: "FacturIA",
-      version: "2026-10-14.2",
+      version: "2026-10-14.3",
       company: COMPANY_PROFILE.legalName,
       monthlyInvoiceEstimate: COMPANY_PROFILE.monthlyInvoiceEstimate
     });
@@ -143,7 +144,19 @@ async function handle(req, res) {
   const fileMatch = path.match(/^\/invoices\/([^/]+)\/(pdf|xml)$/);
   if (method === "GET" && fileMatch) {
     const [, invoiceId, format] = fileMatch;
-    const file = await downloadInvoiceFile(invoiceId, format);
+    let file;
+    if (format === "pdf" && req.query?.original !== "1") {
+      // Representacion impresa propia (identidad Z); si falla, se entrega la de Facturapi.
+      try {
+        const [xmlBuf, info] = await Promise.all([downloadInvoiceFile(invoiceId, "xml"), getInvoice(invoiceId).catch(() => ({}))]);
+        file = await renderCfdiPdf(xmlBuf.toString("utf8"), { livemode: info.livemode, verificationUrl: info.verification_url });
+      } catch (error) {
+        console.error("PDF propio fallido; se usa el de Facturapi", error);
+        file = await downloadInvoiceFile(invoiceId, "pdf");
+      }
+    } else {
+      file = await downloadInvoiceFile(invoiceId, format);
+    }
     res.set("Content-Type", format === "pdf" ? "application/pdf" : "application/xml");
     res.set("Content-Disposition", `attachment; filename="CFDI-${invoiceId}.${format}"`);
     res.send(file);

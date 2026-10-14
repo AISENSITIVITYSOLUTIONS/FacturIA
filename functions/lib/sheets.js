@@ -67,6 +67,95 @@ function sheetsError(error) {
   return make(`Google Sheets respondio con un error: ${detail.slice(0, 200)}`);
 }
 
+/* ------------------------------------------------- Presentacion de la hoja */
+
+const hex = (h) => {
+  const n = parseInt(h.slice(1), 16);
+  return { red: ((n >> 16) & 255) / 255, green: ((n >> 8) & 255) / 255, blue: (n & 255) / 255 };
+};
+const TAB_COLORS = {
+  Facturas: "#0E2147", Clientes: "#2459C9", Conceptos: "#2459C9", Pagos: "#173E7E",
+  Timbrados: "#7FA3D9", Auditoria: "#8A94A6", Configuracion: "#8A94A6"
+};
+const MONEY_COLS = new Set(["subtotal", "tax", "total", "unit_price", "amount"]);
+const WIDE_COLS = { legal_name: 260, customer_name: 260, description: 300, payload: 420, result: 320, error: 260, notes: 220, email: 220 };
+const ID_COLS = new Set(["id", "external_id", "facturapi_id", "uuid", "invoice_id", "facturapi_payment_id"]);
+
+function styleRequests({ title, sheetId }) {
+  const headers = HEADERS[title] || [];
+  const n = headers.length;
+  const reqs = [
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: n },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: hex("#0E2147"),
+            horizontalAlignment: "LEFT",
+            verticalAlignment: "MIDDLE",
+            padding: { left: 8, right: 8 },
+            textFormat: { foregroundColor: hex("#FFFFFF"), bold: true, fontSize: 10, fontFamily: "Inter" }
+          }
+        },
+        fields: "userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,padding,textFormat)"
+      }
+    },
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: n },
+        cell: { userEnteredFormat: { verticalAlignment: "MIDDLE", textFormat: { fontSize: 10, fontFamily: "Inter", foregroundColor: hex("#24303F") } } },
+        fields: "userEnteredFormat(verticalAlignment,textFormat)"
+      }
+    },
+    { updateDimensionProperties: { range: { sheetId, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 36 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "ROWS", startIndex: 1, endIndex: 1000 }, properties: { pixelSize: 28 }, fields: "pixelSize" } },
+    {
+      addBanding: {
+        bandedRange: {
+          range: { sheetId, startRowIndex: 0, startColumnIndex: 0, endColumnIndex: n },
+          rowProperties: { headerColor: hex("#0E2147"), firstBandColor: hex("#FFFFFF"), secondBandColor: hex("#F4F7FB") }
+        }
+      }
+    }
+  ];
+  headers.forEach((key, i) => {
+    const width = WIDE_COLS[key] || (ID_COLS.has(key) ? 200 : MONEY_COLS.has(key) ? 120 : 140);
+    reqs.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: width }, fields: "pixelSize" } });
+    if (MONEY_COLS.has(key)) {
+      reqs.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, startColumnIndex: i, endColumnIndex: i + 1 },
+          cell: { userEnteredFormat: { numberFormat: { type: "CURRENCY", pattern: "\"$\"#,##0.00" }, horizontalAlignment: "RIGHT" } },
+          fields: "userEnteredFormat(numberFormat,horizontalAlignment)"
+        }
+      });
+    }
+    if (ID_COLS.has(key)) {
+      reqs.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, startColumnIndex: i, endColumnIndex: i + 1 },
+          cell: { userEnteredFormat: { textFormat: { fontFamily: "Roboto Mono", fontSize: 9, foregroundColor: hex("#5B6679") } } },
+          fields: "userEnteredFormat.textFormat"
+        }
+      });
+    }
+  });
+  if (title === SHEETS.invoices) {
+    const statusCol = headers.indexOf("status");
+    const rule = (text, bg, fg) => ({
+      addConditionalFormatRule: {
+        index: 0,
+        rule: {
+          ranges: [{ sheetId, startRowIndex: 1, startColumnIndex: statusCol, endColumnIndex: statusCol + 1 }],
+          booleanRule: { condition: { type: "TEXT_EQ", values: [{ userEnteredValue: text }] }, format: { backgroundColor: hex(bg), textFormat: { foregroundColor: hex(fg), bold: true } } }
+        }
+      }
+    });
+    reqs.push(rule("stamped", "#E6F4EC", "#1D6B44"), rule("draft", "#E6EBF2", "#3E4A5C"), rule("cancelled", "#FCE9E7", "#B42318"));
+  }
+  return reqs;
+}
+
 /**
  * Crea las pestanas y encabezados que falten (una vez por instancia), y
  * siembra el catalogo con los conceptos base si la pestana es nueva.
@@ -83,10 +172,13 @@ async function ensureSheets() {
     const missing = Object.values(SHEETS).filter((title) => !existing.has(title));
 
     if (missing.length) {
-      await sheets.spreadsheets.batchUpdate({
+      const created = await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
-        requestBody: { requests: missing.map((title) => ({ addSheet: { properties: { title, gridProperties: { frozenRowCount: 1 } } } })) }
+        requestBody: { requests: missing.map((title) => ({ addSheet: { properties: { title, gridProperties: { frozenRowCount: 1 }, tabColor: hex(TAB_COLORS[title] || "#2459C9") } } })) }
       });
+      const ids = (created.data.replies || []).map((r, i) => ({ title: missing[i], sheetId: r.addSheet.properties.sheetId }));
+      await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: ids.flatMap(styleRequests) } })
+        .catch((error) => console.error("No se pudo aplicar formato a Sheets", error));
     }
 
     const tabs = Object.values(SHEETS);
@@ -123,7 +215,11 @@ export async function appendRow(tab, row) {
   await ensureSheets();
   const sheets = await client();
   const headers = HEADERS[tab] || Object.keys(row);
-  const values = headers.map((key) => row[key] ?? "");
+  // Montos como numero para que el formato de moneda de la hoja aplique.
+  const values = headers.map((key) => {
+    const v = row[key] ?? "";
+    return MONEY_COLS.has(key) && v !== "" && Number.isFinite(Number(v)) ? Number(v) : v;
+  });
   try {
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
