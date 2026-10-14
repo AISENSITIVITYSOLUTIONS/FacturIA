@@ -3,20 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0B0C0E" />
+    <meta name="theme-color" content="#070D18" />
     <title>FacturAI · Z E-Scooters México</title>
     <meta name="description" content="FacturAI: facturación CFDI 4.0 para Z E-Scooters México." />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=2" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Saira:ital,wght@0,500;1,700;1,800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=3" />
   </head>
   <body>
     <!-- Acceso -->
     <div class="gate" id="gate" hidden>
       <form class="gate-card" id="gate-form" autocomplete="off">
-        <img class="gate-logo" src="/assets/z-personal-electric-sidebar.png" alt="Z Personal Electric Vehicle" />
+        <img class="gate-logo" src="/assets/z-logo-alpha.png" alt="Z Personal Electric Vehicle" />
         <div class="gate-copy">
           <span class="eyebrow">FacturAI · Acceso</span>
           <h1>Facturación CFDI 4.0</h1>
@@ -34,7 +34,7 @@
     <div class="shell">
       <aside class="sidebar">
         <a class="brand" href="#facturar" aria-label="FacturAI, inicio">
-          <img src="/assets/z-personal-electric-sidebar.png" alt="Z Personal Electric Vehicle" />
+          <img src="/assets/z-logo-alpha.png" alt="Z Personal Electric Vehicle" />
         </a>
         <div class="brand-name">
           <strong>FacturAI</strong>
@@ -90,13 +90,19 @@
 
         <!-- ============ FACTURAR ============ -->
         <main class="view" id="view-facturar" data-view="facturar">
-          <div class="page-head">
-            <div>
-              <span class="eyebrow">CFDI 4.0 · Ingreso</span>
-              <h1>Nueva factura</h1>
-              <p>Captura receptor y conceptos; la vista previa se arma en tiempo real. Al timbrar, el PDF y el XML se envían al correo del cliente.</p>
+          <section class="hero" id="hero" aria-labelledby="hero-title">
+            <div class="hero-plate">
+              <div class="hero-floor" aria-hidden="true"></div>
+              <div class="hero-sheen" aria-hidden="true"></div>
+              <div class="hero-copy">
+                <h1 class="hero-title" id="hero-title">Hyper CFDI 4.0</h1>
+                <p class="hero-sub">En menos de un minuto</p>
+              </div>
+              <div class="hero-logo">
+                <img src="/assets/z-logo-alpha.png" alt="Z Personal Electric Vehicle" />
+              </div>
             </div>
-          </div>
+          </section>
 
           <form class="compose" id="invoice-form" novalidate>
             <div class="compose-main">
@@ -415,6 +421,6 @@
     </template>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js?v=2" type="module"></script>
+    <script src="/app.js?v=3" type="module"></script>
   </body>
 </html>
