@@ -432,6 +432,7 @@ function showSuccess(data, kind, payload) {
   $$("[data-download]").forEach((b) => { b.hidden = isDraft || !inv.id; });
   $("#btn-resend").hidden = isDraft || !inv.id;
   location.hash = "#exito";
+  if (!isDraft) playStamp();
 }
 
 async function download(id, format) {
@@ -638,6 +639,46 @@ function toast(message) {
   });
 })();
 
+/* ------------------------------------------------------- Timbre 3D */
+
+// El módulo WebGL se carga solo si el equipo lo soporta y no se pidió
+// reducir movimiento; si falla, la interfaz sigue completa sin él.
+const motionOK = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let coinModule = null;
+let stampCoin = null;
+
+async function loadCoin() {
+  if (!motionOK) return null;
+  if (!coinModule) {
+    coinModule = import("/coin3d.js?v=4").catch(() => null);
+  }
+  const mod = await coinModule;
+  return mod && mod.webglAvailable() ? mod : null;
+}
+
+async function mountHeroCoin() {
+  const mod = await loadCoin();
+  const host = $("#hero-coin");
+  if (!mod || !host || host.childElementCount) return;
+  try {
+    await mod.mountCoin(host, { mode: "hero" });
+    $("#hero").classList.add("has-3d");
+  } catch { /* sin WebGL: portada estática */ }
+}
+
+async function playStamp() {
+  const badge = $(".success-badge");
+  stampCoin?.destroy();
+  stampCoin = null;
+  badge.classList.remove("has-3d");
+  const mod = await loadCoin();
+  if (!mod) return;
+  try {
+    stampCoin = await mod.mountCoin($("#stamp-coin"), { mode: "stamp" });
+    badge.classList.add("has-3d");
+  } catch { /* se queda la palomita */ }
+}
+
 /* ---------------------------------------------------------------- Boot */
 
 let booted = false;
@@ -645,6 +686,7 @@ function boot() {
   if (booted) { route(); return; }
   booted = true;
   route();
+  mountHeroCoin();
   loadMeter();
   loadCatalog();
   loadCustomers();

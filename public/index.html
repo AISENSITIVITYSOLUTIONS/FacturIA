@@ -10,7 +10,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Saira:ital,wght@0,500;1,700;1,800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=3" />
+    <link rel="stylesheet" href="/styles.css?v=4" />
+    <link rel="modulepreload" href="/vendor/three.module.min.js" />
+    <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
   </head>
   <body>
     <!-- Acceso -->
@@ -91,15 +93,17 @@
         <!-- ============ FACTURAR ============ -->
         <main class="view" id="view-facturar" data-view="facturar">
           <section class="hero" id="hero" aria-labelledby="hero-title">
-            <div class="hero-plate">
+            <div class="hero-plate" data-coin-tracker>
               <div class="hero-floor" aria-hidden="true"></div>
               <div class="hero-sheen" aria-hidden="true"></div>
               <div class="hero-copy">
                 <h1 class="hero-title" id="hero-title">Hyper CFDI 4.0</h1>
                 <p class="hero-sub">En menos de un minuto</p>
+                <img class="hero-brand" src="/assets/z-logo-alpha.png" alt="Z Personal Electric Vehicle" />
               </div>
-              <div class="hero-logo">
-                <img src="/assets/z-logo-alpha.png" alt="Z Personal Electric Vehicle" />
+              <div class="hero-stage" aria-hidden="true">
+                <div class="hero-coin" id="hero-coin"></div>
+                <div class="hero-shadow"></div>
               </div>
             </div>
           </section>
@@ -281,8 +285,11 @@
         <main class="view" id="view-exito" data-view="exito" hidden>
           <div class="success">
             <div class="success-main">
-              <div class="success-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              <div class="success-badge" aria-hidden="true">
+                <div class="stamp-coin" id="stamp-coin"></div>
+                <div class="success-icon">
+                  <svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </div>
               </div>
               <span class="eyebrow ok" id="sx-kicker">Timbrado ante el SAT</span>
               <h1 id="sx-title">Factura emitida</h1>
@@ -421,6 +428,6 @@
     </template>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js?v=3" type="module"></script>
+    <script src="/app.js?v=4" type="module"></script>
   </body>
 </html>
