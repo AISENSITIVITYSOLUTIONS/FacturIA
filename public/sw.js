@@ -2,9 +2,9 @@
 // - La interfaz (HTML, CSS, JS, íconos) se guarda para abrir rápido y sin red.
 // - /api y el inicio de sesión de Google NUNCA se guardan: facturas, clientes
 //   y timbrado siempre se consultan en línea.
-const VERSION = "facturai-v7";
+const VERSION = "facturai-v8";
 const SHELL = [
-  "/", "/index.html", "/styles.css?v=6", "/app.js?v=7", "/auth.js?v=6", "/coin3d.js?v=4",
+  "/", "/index.html", "/styles.css?v=7", "/app.js?v=8", "/finder.js?v=1", "/data/catalogo.json?v=8.1", "/auth.js?v=6", "/coin3d.js?v=4",
   "/vendor/three.module.min.js", "/vendor/RoomEnvironment.js",
   "/assets/z-logo-alpha.png", "/icons/icon-192.png", "/icons/icon-512.png", "/manifest.webmanifest"
 ];

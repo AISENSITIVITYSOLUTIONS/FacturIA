@@ -3,6 +3,7 @@
 // Facturapi vive como secreto en el servidor y nunca llega al navegador.
 
 import { initAuth, signIn, signOut, idToken } from "/auth.js?v=6";
+import { mountFinder, STATUS as CATALOG_STATUS } from "/finder.js?v=1";
 
 const GENERIC_RFC = new Set(["XAXX010101000", "XEXX010101000"]);
 const RFC_RE = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
@@ -231,31 +232,84 @@ $("#add-line").addEventListener("click", () => {
   $("[data-k='description']", node).focus();
 });
 
+/* ------------------------------------------- Buscador del catálogo Z */
+
+const CATALOG_URL = "/data/catalogo.json?v=8.1";
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+function isBlankLine(l) {
+  return !l.price && (!l.description || l.description === "Venta de vehículo eléctrico personal");
+}
+
+function setOrigin(node, item) {
+  const el = $("[data-origin]", node);
+  if (!el) return;
+  if (!item) { el.hidden = true; el.replaceChildren(); return; }
+  const st = CATALOG_STATUS[item.status] || CATALOG_STATUS.disponible;
+  const dot = document.createElement("i");
+  dot.dataset.tone = st.tone;
+  const text = item.tax_included === false
+    ? "Concepto guardado"
+    : `Catálogo · precio público ${money.format(item.price)} con IVA`;
+  el.replaceChildren(dot, text);
+  el.title = `${item.description} · ${st.label}`;
+  el.hidden = false;
+}
+
+function pickFromCatalog(item) {
+  const unitPrice = item.tax_included === false ? item.price : round2(item.price / (1 + IVA));
+  const lines = readLines();
+  const same = lines.find((l) => l.node.dataset.catalogId === item.id);
+  let node;
+  if (same) {
+    node = same.node;
+    $("[data-k='quantity']", node).value = String((same.quantity || 0) + 1);
+  } else {
+    const values = { description: item.description, product_key: item.product_key, unit_key: item.unit_key || "H87", quantity: 1, price: unitPrice.toFixed(2) };
+    const blank = lines.find(isBlankLine);
+    if (blank) {
+      node = blank.node;
+      Object.entries(values).forEach(([k, v]) => { const i = $(`[data-k='${k}']`, node); if (i) i.value = v; });
+    } else {
+      node = addLine(values);
+    }
+    node.dataset.catalogId = item.id;
+    setOrigin(node, item);
+  }
+  refresh();
+  node.classList.remove("is-new");
+  void node.offsetWidth;
+  node.classList.add("is-new");
+  node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+
+  const qty = $("[data-k='quantity']", node).value;
+  const warn = item.status === "agotado" ? " · Atención: marcado como agotado."
+    : item.status === "verificar" ? " · Precio o existencia por verificar."
+    : item.status === "preorden" ? " · Producto en pre orden." : "";
+  toast(same
+    ? `${item.description}: cantidad ${qty}.`
+    : `Agregado: ${item.description} · ${money.format(unitPrice)} + IVA${warn}`);
+}
+
+// Si se edita a mano la descripción o el precio, el concepto deja de ser
+// «del catálogo» y se quita la etiqueta de origen.
+linesEl.addEventListener("input", (e) => {
+  const k = e.target.dataset?.k;
+  if (k !== "description" && k !== "price") return;
+  const node = e.target.closest(".line");
+  if (node?.dataset.catalogId) { delete node.dataset.catalogId; setOrigin(node, null); }
+});
+
+const finder = mountFinder($("#finder"), { onPick: pickFromCatalog });
+
 async function loadCatalog() {
   try {
+    await finder.load(CATALOG_URL);
+  } catch (error) { console.warn("Catálogo no disponible:", error); }
+  try {
     const { data } = await api("/products");
-    const active = data.filter((p) => String(p.active || "SI").toUpperCase() !== "NO").slice(0, 12);
-    if (!active.length) return;
-    const chips = $("#catalog-chips");
-    chips.replaceChildren(...active.map((p) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip";
-      b.textContent = p.description;
-      b.addEventListener("click", () => {
-        const empty = readLines().find((l) => !l.price && (!l.description || l.description === "Venta de vehículo eléctrico personal"));
-        const values = { description: p.description, product_key: p.product_key, unit_key: p.unit_key || "H87", quantity: 1, price: p.unit_price };
-        if (empty) {
-          Object.entries(values).forEach(([k, v]) => { const i = $(`[data-k='${k}']`, empty.node); if (i && v !== undefined) i.value = v; });
-          refresh();
-        } else {
-          addLine(values);
-        }
-      });
-      return b;
-    }));
-    $("#catalog").hidden = false;
-  } catch { /* catálogo opcional */ }
+    finder.setSaved(data.filter((p) => String(p.active || "SI").toUpperCase() !== "NO"));
+  } catch { /* conceptos guardados opcionales */ }
 }
 
 /* ------------------------------------------------------- Vista previa */
