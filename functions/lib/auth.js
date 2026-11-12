@@ -2,7 +2,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FACTURAI_ALLOWED_EMAILS, readSecretOrEmpty } from "./env.js";
 import { httpError } from "./validators.js";
 import { SHEETS } from "../data/sheetSchema.js";
-import { appendRow, audit, findRow, listRows, updateRow } from "./sheets.js";
+import { appendRow, audit, deleteRowsWhere, findRow, listRows, updateRow } from "./sheets.js";
 
 /**
  * Lista de acceso: correos completos (ventas@zescootersmx.com) o dominios
@@ -46,9 +46,36 @@ async function sheetUsers({ fresh = false } = {}) {
 }
 
 export async function listUsers() {
-  const admins = allowList().map((entry) => ({ email: entry, name: "", role: "admin", active: "SI", source: "firebase" }));
-  const rows = (await sheetUsers({ fresh: true })).map((r) => ({ ...r, email: normEmail(r.email), source: "sheets" }));
-  return [...admins, ...rows.filter((r) => r.email)];
+  const list = allowList();
+  const admins = list.map((entry) => ({ email: entry, name: "", role: "admin", active: "SI", source: "firebase" }));
+  let rows = await sheetUsers({ fresh: true });
+
+  // Quita filas repetidas del mismo correo (se conserva la primera).
+  const seen = new Set();
+  const dupes = new Set();
+  rows.forEach((r, i) => { const e = normEmail(r.email); if (seen.has(e)) dupes.add(i); else seen.add(e); });
+  if (dupes.size) {
+    await deleteRowsWhere(SHEETS.users, "email", (_, i) => dupes.has(i)).catch(() => 0);
+    rows = rows.filter((_, i) => !dupes.has(i));
+    usersCache.at = 0;
+  }
+
+  const sheetRows = rows
+    .map((r) => ({ ...r, email: normEmail(r.email), source: "sheets" }))
+    .filter((r) => r.email && !isAllowed(r.email, list));
+  return [...admins, ...sheetRows];
+}
+
+export async function removeUser(email, actor) {
+  const clean = normEmail(email);
+  if (isAllowed(clean, allowList())) {
+    throw httpError(400, "Ese correo es administrador fijo de Firebase; no se puede eliminar desde la app.");
+  }
+  if (clean === normEmail(actor.email)) throw httpError(400, "No puedes eliminar tu propia cuenta.");
+  const removed = await deleteRowsWhere(SHEETS.users, "email", (value) => value === clean);
+  usersCache.at = 0;
+  await audit("user.delete", clean, { removed }, actor.email).catch(() => {});
+  return { email: clean, removed };
 }
 
 export async function saveUser({ email, name, role, active }, actor) {

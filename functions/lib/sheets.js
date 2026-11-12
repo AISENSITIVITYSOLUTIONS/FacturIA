@@ -261,6 +261,35 @@ export async function listRows(tab, limit = 200) {
     .map((row) => Object.fromEntries(headers.map((key, index) => [key, row[index] || ""])));
 }
 
+/**
+ * Borra las filas de `tab` cuya columna `key` coincide (sin distinguir
+ * mayusculas) con `matches(value)`. Devuelve cuantas filas borro.
+ */
+export async function deleteRowsWhere(tab, key, matches) {
+  await ensureSheets();
+  const sheets = await client();
+  const spreadsheetId = sheetId();
+  try {
+    const [meta, values] = await Promise.all([
+      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,title)" }),
+      sheets.spreadsheets.values.get({ spreadsheetId, range: `${tab}!A1:Z` })
+    ]);
+    const tabId = meta.data.sheets.find((x) => x.properties.title === tab)?.properties.sheetId;
+    const [headers = [], ...rows] = values.data.values || [];
+    const col = headers.indexOf(key);
+    if (tabId === undefined || col < 0) return 0;
+    const targets = rows.map((r, i) => (matches(String(r[col] || "").trim().toLowerCase(), i) ? i + 1 : -1)).filter((i) => i > 0);
+    if (!targets.length) return 0;
+    const requests = targets.sort((a, b) => b - a).map((index) => ({
+      deleteDimension: { range: { sheetId: tabId, dimension: "ROWS", startIndex: index, endIndex: index + 1 } }
+    }));
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+    return targets.length;
+  } catch (error) {
+    throw sheetsError(error);
+  }
+}
+
 /** Busca la primera fila cuya columna `key` sea `value`. Devuelve { rowNumber, row } o null. */
 export async function findRow(tab, key, value) {
   await ensureSheets();
