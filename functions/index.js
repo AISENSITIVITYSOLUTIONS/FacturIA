@@ -3,7 +3,7 @@ import { initializeApp } from "firebase-admin/app";
 import { COMPANY_PROFILE, DEFAULT_INVOICE_SETTINGS } from "./config/company.js";
 import { SHEETS } from "./data/sheetSchema.js";
 import { appendRow, audit, dashboard, listRows } from "./lib/sheets.js";
-import { requireUser } from "./lib/auth.js";
+import { listUsers, requireUser, saveUser } from "./lib/auth.js";
 import { acquireStampLock, completeStampLock, releaseStampLock } from "./lib/idempotency.js";
 import { cancelInvoice, createDraft, createInvoice, downloadInvoiceFile, facturapiStatus, getInvoice, pdfUrl, sendInvoiceByEmail, xmlUrl } from "./lib/facturapi.js";
 import { renderCfdiPdf } from "./lib/cfdiPdf.js";
@@ -107,6 +107,8 @@ async function upsertCustomer(payload) {
   });
 }
 
+const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+
 async function handle(req, res) {
   cors(res);
   if (req.method === "OPTIONS") {
@@ -121,7 +123,7 @@ async function handle(req, res) {
     res.json({
       ok: true,
       service: "FacturIA",
-      version: "2026-10-14.3",
+      version: "2026-11-12.1",
       company: COMPANY_PROFILE.legalName,
       monthlyInvoiceEstimate: COMPANY_PROFILE.monthlyInvoiceEstimate
     });
@@ -131,7 +133,21 @@ async function handle(req, res) {
   const user = await requireUser(req);
 
   if (method === "GET" && path === "/session") {
-    res.json({ ok: true, data: { user: { email: user.email, name: user.name }, facturapi: await facturapiStatus() } });
+    res.json({ ok: true, data: { user: { email: user.email, name: user.name, role: user.role }, facturapi: await facturapiStatus() } });
+    return;
+  }
+
+  if (path === "/users" && (method === "GET" || method === "POST")) {
+    if (user.role !== "admin") throw httpError(403, "Solo un administrador puede gestionar usuarios.");
+    if (method === "GET") {
+      res.json({ ok: true, data: await listUsers() });
+      return;
+    }
+    const body = req.body || {};
+    if (normalizeEmail(body.email) === user.email.toLowerCase() && body.active === false) {
+      throw httpError(400, "No puedes desactivar tu propia cuenta.");
+    }
+    res.json({ ok: true, data: await saveUser(body, user) });
     return;
   }
 

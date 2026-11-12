@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID, readSecret, readSecretOrEmpty } from "./env.js";
-import { DEFAULT_PRODUCTS, HEADERS, SHEETS } from "../data/sheetSchema.js";
+import { DEFAULT_PRODUCTS, DEFAULT_USERS, HEADERS, SHEETS } from "../data/sheetSchema.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
@@ -75,7 +75,7 @@ const hex = (h) => {
 };
 const TAB_COLORS = {
   Facturas: "#0E2147", Clientes: "#2459C9", Conceptos: "#2459C9", Pagos: "#173E7E",
-  Timbrados: "#7FA3D9", Auditoria: "#8A94A6", Configuracion: "#8A94A6"
+  Timbrados: "#7FA3D9", Usuarios: "#2459C9", Auditoria: "#8A94A6", Configuracion: "#8A94A6"
 };
 const MONEY_COLS = new Set(["subtotal", "tax", "total", "unit_price", "amount"]);
 const WIDE_COLS = { legal_name: 260, customer_name: 260, description: 300, payload: 420, result: 320, error: 260, notes: 220, email: 220 };
@@ -194,6 +194,15 @@ async function ensureSheets() {
     });
     if (updates.length) {
       await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: "RAW", data: updates } });
+    }
+
+    if (missing.includes(SHEETS.users)) {
+      const now = new Date().toISOString();
+      const rows = DEFAULT_USERS.map((u) => HEADERS[SHEETS.users].map((k) =>
+        k === "created_at" ? now : k === "created_by" ? "alta inicial" : (u[k] ?? "")));
+      await sheets.spreadsheets.values.append({
+        spreadsheetId, range: `${SHEETS.users}!A:Z`, valueInputOption: "RAW", requestBody: { values: rows }
+      });
     }
 
     if (missing.includes(SHEETS.products)) {

@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Saira:ital,wght@0,500;1,700;1,800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=7" />
+    <link rel="stylesheet" href="/styles.css?v=8" />
     <link rel="modulepreload" href="/vendor/three.module.min.js" />
     <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
   </head>
@@ -64,6 +64,10 @@
           <a href="#historial" data-view-link="historial">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
             Historial
+          </a>
+          <a href="#usuarios" data-view-link="usuarios" id="nav-users" hidden>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+            Usuarios
           </a>
         </nav>
 
@@ -411,6 +415,37 @@
             <div class="empty" id="invoices-empty" hidden></div>
           </div>
         </main>
+        <!-- ============ USUARIOS ============ -->
+        <main class="view" id="view-usuarios" data-view="usuarios" hidden>
+          <div class="page-head">
+            <div>
+              <span class="eyebrow">Acceso</span>
+              <h1>Usuarios</h1>
+              <p>Quién puede entrar con Google y timbrar. Los cambios aplican en menos de un minuto.</p>
+            </div>
+            <button class="btn btn-ghost" type="button" id="refresh-users">Actualizar</button>
+          </div>
+          <form class="user-add" id="user-form" novalidate>
+            <input class="input" type="email" id="user-email" placeholder="correo@gmail.com" autocomplete="off" required />
+            <input class="input" type="text" id="user-name" placeholder="Nombre (opcional)" autocomplete="off" />
+            <select class="input" id="user-role" aria-label="Rol">
+              <option value="usuario">Usuario</option>
+              <option value="admin">Administrador</option>
+            </select>
+            <button class="btn btn-primary" type="submit" id="user-add">Agregar</button>
+          </form>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="table">
+                <thead>
+                  <tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Estado</th><th><span class="sr-only">Acción</span></th></tr>
+                </thead>
+                <tbody id="users-body"></tbody>
+              </table>
+            </div>
+            <div class="empty" id="users-empty" hidden></div>
+          </div>
+        </main>
       </div>
     </div>
 
@@ -465,6 +500,6 @@
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </aside>
-    <script src="/app.js?v=8" type="module"></script>
+    <script src="/app.js?v=9" type="module"></script>
   </body>
 </html>

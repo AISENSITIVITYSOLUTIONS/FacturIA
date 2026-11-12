@@ -5,7 +5,8 @@ export const SHEETS = {
   payments: "Pagos",
   settings: "Configuracion",
   audit: "Auditoria",
-  locks: "Timbrados"
+  locks: "Timbrados",
+  users: "Usuarios"
 };
 
 export const HEADERS = {
@@ -70,6 +71,14 @@ export const HEADERS = {
     "value",
     "description"
   ],
+  [SHEETS.users]: [
+    "email",
+    "name",
+    "role",
+    "active",
+    "created_at",
+    "created_by"
+  ],
   [SHEETS.locks]: [
     "external_id",
     "status",
@@ -123,4 +132,12 @@ export const DEFAULT_PRODUCTS = [
     tax_rate: 0.16,
     active: "SI"
   }
+];
+
+// Usuarios que se dan de alta al crear la pestana "Usuarios".
+// Los administradores viven en el secreto FACTURAI_ALLOWED_EMAILS.
+export const DEFAULT_USERS = [
+  { email: "nadia.scooter.zia@gmail.com", name: "Nadia", role: "usuario", active: "SI" },
+  { email: "jessica.scooter.zia@gmail.com", name: "Jessica", role: "usuario", active: "SI" },
+  { email: "triana.scooter.zia@gmail.com", name: "Triana", role: "usuario", active: "SI" }
 ];
