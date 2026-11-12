@@ -698,6 +698,17 @@ async function saveUser(payload, okText) {
   }
 }
 
+async function removeUser(email) {
+  if (!window.confirm(`¿Eliminar a ${email}? Ya no podrá entrar y dejará de aparecer en la lista.`)) return;
+  try {
+    await api("/users/remove", { method: "POST", body: { email } });
+    toast(`${email} se eliminó.`);
+    loadUsers();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
 async function loadUsers() {
   const body = $("#users-body");
   const empty = $("#users-empty");
@@ -719,7 +730,16 @@ async function loadUsers() {
         b.className = "btn btn-ghost btn-sm";
         b.textContent = on ? "Quitar acceso" : "Dar acceso";
         b.addEventListener("click", () => saveUser({ email: u.email, active: !on }, on ? `${u.email} ya no tiene acceso.` : `${u.email} tiene acceso.`));
-        act.append(b);
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn btn-ghost btn-sm btn-danger";
+        del.textContent = "Eliminar";
+        del.setAttribute("aria-label", `Eliminar ${u.email}`);
+        del.addEventListener("click", () => removeUser(u.email));
+        const wrap = document.createElement("div");
+        wrap.className = "row-actions";
+        wrap.append(b, del);
+        act.append(wrap);
       } else {
         act.textContent = "Fijo";
         act.className = "muted-cell";

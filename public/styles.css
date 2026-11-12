@@ -779,3 +779,5 @@ kbd, .finder-kbd { display: inline-flex; align-items: center; justify-content: c
 .user-add { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 170px auto; gap: 10px; align-items: center; }
 .muted-cell { color: var(--faint); font-size: 12px; }
 @media (max-width: 720px) { .user-add { grid-template-columns: 1fr; } }
+.btn-danger { color: var(--danger); }
+.btn-danger:hover:not(:disabled) { border-color: var(--danger); }
