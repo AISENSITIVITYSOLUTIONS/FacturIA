@@ -91,12 +91,16 @@ function showGate(message = "", { switchAccount = false } = {}) {
   setGateReady();
 }
 
+let sessionRole = "usuario";
+
 async function openSession(user) {
   setGateBusy("Verificando acceso…");
   try {
     const { data } = await api("/session");
     $("#gate").hidden = true;
     $("#session-user").textContent = data.user?.email || user.email || "";
+    sessionRole = data.user?.role || "usuario";
+    $("#nav-users").hidden = sessionRole !== "admin";
     paintConnection(data.facturapi);
     boot();
   } catch (error) {
@@ -132,7 +136,7 @@ $("#logout").addEventListener("click", async () => {
 
 function route() {
   const name = (location.hash || "#facturar").slice(1);
-  const views = ["facturar", "clientes", "historial", "exito"];
+  const views = ["facturar", "clientes", "historial", "exito", "usuarios"];
   const target = views.includes(name) ? name : "facturar";
   $$(".view").forEach((v) => { v.hidden = v.dataset.view !== target; });
   $$("[data-view-link]").forEach((a) => {
@@ -141,6 +145,10 @@ function route() {
   });
   if (target === "clientes") loadCustomers();
   if (target === "historial") loadInvoices();
+  if (target === "usuarios") {
+    if (sessionRole !== "admin") { location.hash = "#facturar"; return; }
+    loadUsers();
+  }
   if (target === "exito" && !lastInvoice) location.hash = "#facturar";
   window.scrollTo({ top: 0 });
 }
@@ -677,6 +685,69 @@ async function loadInvoices() {
   }
 }
 $("#refresh-invoices").addEventListener("click", loadInvoices);
+
+/* ------------------------------------------------------------ Usuarios */
+
+async function saveUser(payload, okText) {
+  try {
+    await api("/users", { method: "POST", body: payload });
+    toast(okText);
+    loadUsers();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+async function loadUsers() {
+  const body = $("#users-body");
+  const empty = $("#users-empty");
+  try {
+    const { data } = await api("/users");
+    const rows = data || [];
+    body.replaceChildren(...rows.map((u) => {
+      const tr = document.createElement("tr");
+      const on = String(u.active || "SI").toUpperCase() !== "NO";
+      const st = document.createElement("td");
+      const pill = document.createElement("span");
+      pill.className = `pill ${on ? "pill-stamped" : "pill-cancelled"}`;
+      pill.textContent = on ? "Activo" : "Sin acceso";
+      st.append(pill);
+      const act = document.createElement("td");
+      if (u.source === "sheets") {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn-ghost btn-sm";
+        b.textContent = on ? "Quitar acceso" : "Dar acceso";
+        b.addEventListener("click", () => saveUser({ email: u.email, active: !on }, on ? `${u.email} ya no tiene acceso.` : `${u.email} tiene acceso.`));
+        act.append(b);
+      } else {
+        act.textContent = "Fijo";
+        act.className = "muted-cell";
+        act.title = "Administrador definido en Firebase";
+      }
+      const role = u.role === "admin" ? "Administrador" : "Usuario";
+      tr.append(cell(u.email, "mono"), cell(u.name || "—"), cell(role), st, act);
+      return tr;
+    }));
+    if (!rows.length) emptyState(empty, "Sin usuarios", "Agrega el primer correo con el formulario.");
+    else empty.hidden = true;
+  } catch (error) {
+    if (error.status === 401) return;
+    body.replaceChildren();
+    emptyState(empty, "Usuarios no disponibles", error.message);
+  }
+}
+
+$("#user-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const email = $("#user-email").value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast("Escribe un correo válido."); return; }
+  $("#user-add").disabled = true;
+  await saveUser({ email, name: $("#user-name").value.trim(), role: $("#user-role").value, active: true }, `${email} puede entrar con Google.`);
+  $("#user-add").disabled = false;
+  $("#user-form").reset();
+});
+$("#refresh-users").addEventListener("click", loadUsers);
 
 /* --------------------------------------------------------------- Toast */
 
